@@ -12,13 +12,15 @@ permissions:
 jobs:
   build-macos-dmg:
     runs-on: macos-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 20
           cache: npm
@@ -26,11 +28,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Strip extended attributes from build paths
+        run: xattr -cr build resources out dist || true
+
       - name: Build and package macOS app
         run: npm run build:mac
 
       - name: Upload DMG artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sshterm-dmg
           path: dist/*.dmg
@@ -38,6 +43,6 @@ jobs:
 
       - name: Publish GitHub release assets
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v2.6.1
         with:
           files: dist/*.dmg
