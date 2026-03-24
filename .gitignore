@@ -4,3 +4,8 @@ out
 .DS_Store
 .eslintcache
 *.log*
+
+# Keep build artifacts ignored, but ensure required mac entitlements plist is tracked
+!build/
+build/*
+!build/entitlements.mac.plist
