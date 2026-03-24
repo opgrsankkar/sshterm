@@ -59,17 +59,26 @@ body {
 }
 
 .sidebar {
+  display: flex;
+  flex-direction: column;
   width: 380px;
   background: var(--ui-bg-panel);
   border-right: 1px solid var(--ui-border-soft);
   padding: 14px;
-  overflow: auto;
+  overflow: hidden;
   transition: width 120ms ease;
 }
 
 .sidebar.collapsed {
   padding: 10px 8px;
   overflow: hidden;
+}
+
+.sidebar-content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-bottom: 12px;
 }
 
 .sidebar-header {
@@ -127,11 +136,26 @@ body {
   outline: none;
 }
 
+.config-row select {
+  flex: 1;
+  background: var(--ui-field-bg);
+  border: 1px solid var(--ui-border-strong);
+  color: #e5ebf5;
+  border-radius: 6px;
+  padding: 8px;
+  outline: none;
+}
+
 .config-row input::placeholder {
   color: var(--ui-text-muted);
 }
 
 .config-row input:focus {
+  border-color: var(--ui-accent-border);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ui-accent-border) 70%, transparent);
+}
+
+.config-row select:focus {
   border-color: var(--ui-accent-border);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--ui-accent-border) 70%, transparent);
 }
@@ -307,8 +331,10 @@ body {
 }
 
 .tab.active {
-  background: #16385f;
-  border-color: #3b78b6;
+  background: #0c1523;
+  border-color: #284062;
+  border-width: 2px;
+  color: #d9e4f4;
 }
 
 .tab button {
@@ -661,6 +687,48 @@ body {
   z-index: 1;
 }
 
+.context-menu-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2500;
+}
+
+.context-menu {
+  position: fixed;
+  min-width: 190px;
+  background: var(--ui-bg-elevated);
+  border: 1px solid var(--ui-border-strong);
+  border-radius: 8px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.context-menu-item {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--ui-text);
+  border-radius: 6px;
+  text-align: left;
+  padding: 7px 9px;
+  cursor: pointer;
+}
+
+.context-menu-item:hover {
+  background: var(--ui-secondary-bg);
+  border-color: var(--ui-secondary-border);
+}
+
+.space-selector-wrap {
+  margin: auto -14px -14px;
+  padding: 8px 14px 10px;
+  border: none;
+  border-top: 1px solid var(--ui-border-soft);
+  border-radius: 0;
+  background: #08101d;
+}
+
 /* Uniform blackout theme to remove visible panel seams */
 body,
 #root,
@@ -697,11 +765,13 @@ body,
 }
 
 .tab.active {
-  background: #16385f !important;
-  border-color: #3b78b6 !important;
-  color: #e7f1ff;
+  background: #0c1523 !important;
+  border-color: #284062 !important;
+  border-width: 2px;
+  color: #d9e4f4;
 }
 
-.config-row input {
+.config-row input,
+.config-row select {
   color-scheme: dark;
 }

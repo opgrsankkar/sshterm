@@ -25,9 +25,11 @@ export interface HostEntry {
   pingTarget: string
   isFavorite: boolean
   options: HostOptions
+  sourceSpaceName: string | null
+  effectiveSpaceName: string
   sourceGroupPath: string | null
   effectiveGroupPath: string | null
-  assignmentReason: 'valid-comment' | 'invalid-comment' | 'no-comment' | 'override'
+  assignmentReason: 'valid-comment' | 'invalid-comment' | 'no-comment' | 'override' | 'space-derived'
 }
 
 export interface GroupNode {
@@ -35,6 +37,13 @@ export interface GroupNode {
   path: string
   children: GroupNode[]
   hosts: HostEntry[]
+  spaceName: string | null
+  effectiveSpaceName: string
+}
+
+export interface SpaceDefinition {
+  name: string
+  rootGroupPath: string
 }
 
 export interface SshConfigModel {
@@ -42,6 +51,8 @@ export interface SshConfigModel {
   globalRoot: GroupNode
   unassigned: HostEntry[]
   availableGroups: string[]
+  spaces: SpaceDefinition[]
+  availableSpaceNames: string[]
 }
 
 export interface AppSettings {

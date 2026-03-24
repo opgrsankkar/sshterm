@@ -17,6 +17,8 @@ interface SshtermApi {
   moveGroup: (sourceGroupPath: string, targetParentGroupPath: string) => Promise<SshConfigModel>
   createGroup: (parentPath: string, folderName: string) => Promise<SshConfigModel>
   deleteGroup: (groupPath: string) => Promise<SshConfigModel>
+  convertGroupToSpace: (groupPath: string, spaceName: string) => Promise<SshConfigModel>
+  convertSpaceToGroup: (groupPath: string) => Promise<SshConfigModel>
   deleteHost: (alias: string) => Promise<SshConfigModel>
   addHost: (payload: {
     name: string

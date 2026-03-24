@@ -12,6 +12,8 @@ const CHANNELS = {
   moveGroup: 'ssh:moveGroup',
   createGroup: 'ssh:createGroup',
   deleteGroup: 'ssh:deleteGroup',
+  convertGroupToSpace: 'ssh:convertGroupToSpace',
+  convertSpaceToGroup: 'ssh:convertSpaceToGroup',
   deleteHost: 'ssh:deleteHost',
   addHost: 'ssh:addHost',
   updateHostSettings: 'ssh:updateHostSettings',
@@ -55,6 +57,10 @@ const api = {
     electronAPI.ipcRenderer.invoke(CHANNELS.createGroup, { parentPath, folderName }),
   deleteGroup: (groupPath: string): Promise<SshConfigModel> =>
     electronAPI.ipcRenderer.invoke(CHANNELS.deleteGroup, { groupPath }),
+  convertGroupToSpace: (groupPath: string, spaceName: string): Promise<SshConfigModel> =>
+    electronAPI.ipcRenderer.invoke(CHANNELS.convertGroupToSpace, { groupPath, spaceName }),
+  convertSpaceToGroup: (groupPath: string): Promise<SshConfigModel> =>
+    electronAPI.ipcRenderer.invoke(CHANNELS.convertSpaceToGroup, { groupPath }),
   deleteHost: (alias: string): Promise<SshConfigModel> =>
     electronAPI.ipcRenderer.invoke(CHANNELS.deleteHost, { alias }),
   addHost: (

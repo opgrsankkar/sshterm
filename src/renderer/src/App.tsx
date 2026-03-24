@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as Tooltip from '@radix-ui/react-tooltip'
+import Select from 'react-select'
+import type { StylesConfig } from 'react-select'
 import {
   Check,
   ChevronDown,
@@ -53,6 +55,74 @@ interface HostSettingsDraft {
   groupPath: string
   isFavorite: boolean
   options: HostOptions
+}
+
+interface SpaceOption {
+  value: string
+  label: string
+}
+
+const SPACE_SELECT_STYLES: StylesConfig<SpaceOption, false> = {
+  control: (base, state) => ({
+    ...base,
+    minHeight: 36,
+    backgroundColor: '#0c1523',
+    borderColor: state.isFocused ? 'var(--ui-accent-border)' : 'var(--ui-border-strong)',
+    boxShadow: state.isFocused ? '0 0 0 1px color-mix(in srgb, var(--ui-accent-border) 70%, transparent)' : 'none',
+    borderRadius: 5,
+    '&:hover': {
+      borderColor: 'var(--ui-accent-border)'
+    }
+  }),
+  valueContainer: (base) => ({
+    ...base,
+    padding: '0 8px'
+  }),
+  singleValue: (base) => ({
+    ...base,
+    color: '#e5ebf5',
+    fontSize: 13
+  }),
+  placeholder: (base) => ({
+    ...base,
+    color: 'var(--ui-text-muted)',
+    fontSize: 13
+  }),
+  input: (base) => ({
+    ...base,
+    color: '#e5ebf5',
+    fontSize: 13
+  }),
+  indicatorSeparator: () => ({ display: 'none' }),
+  dropdownIndicator: (base, state) => ({
+    ...base,
+    color: state.isFocused ? '#9ec2ef' : '#8ea4c4',
+    '&:hover': {
+      color: '#9ec2ef'
+    }
+  }),
+  menu: (base) => ({
+    ...base,
+    backgroundColor: '#0b1422',
+    border: '1px solid var(--ui-border-strong)',
+    boxShadow: 'none',
+    borderRadius: 6
+  }),
+  menuPortal: (base) => ({
+    ...base,
+    zIndex: 4000
+  }),
+  option: (base, state) => ({
+    ...base,
+    fontSize: 13,
+    backgroundColor: state.isSelected
+      ? 'var(--ui-accent)'
+      : state.isFocused
+        ? '#14243a'
+        : 'transparent',
+    color: state.isSelected ? '#d7e8ff' : '#d7deea',
+    cursor: 'pointer'
+  })
 }
 
 const ADVANCED_OPTION_GROUPS: Array<
@@ -317,6 +387,7 @@ function GroupPickTree({
 function GroupTree({
   node,
   expandedFolders,
+  activeSpaceName,
   activeHostAlias,
   onToggleFolder,
   onConnect,
@@ -332,11 +403,12 @@ function GroupTree({
 }: {
   node: GroupNode
   expandedFolders: Set<string>
+  activeSpaceName: string
   activeHostAlias: string | null
   onToggleFolder: (path: string) => void
   onConnect: (alias: string) => void
   onHostMenu: (host: HostEntry) => void
-  onFolderMenu: (path: string) => void
+  onFolderMenu: (path: string, anchor: { x: number; y: number }) => void
   onDropToFolder: (payload: DragPayload, targetFolderPath: string) => void
   hostReachability: ReachabilityState
   dropTargetPath: string | null
@@ -345,9 +417,18 @@ function GroupTree({
   onDragBegin: () => void
   onDragFinish: () => void
 }): React.JSX.Element {
+  const visibleChildren = node.children.filter((child) => {
+    if (activeSpaceName === 'Default') {
+      return child.effectiveSpaceName === 'Default'
+    }
+    return child.effectiveSpaceName === activeSpaceName
+  })
+
+  const visibleHosts = node.hosts.filter((host) => host.effectiveSpaceName === activeSpaceName)
+
   return (
     <ul className="group-tree">
-      {node.children.map((child) => {
+      {visibleChildren.map((child) => {
         const open = expandedFolders.has(child.path)
         return (
           <li key={child.path}>
@@ -376,7 +457,7 @@ function GroupTree({
                 className="row-main"
                 onContextMenu={(event) => {
                   event.preventDefault()
-                  onFolderMenu(child.path)
+                  onFolderMenu(child.path, { x: event.clientX, y: event.clientY })
                 }}
               >
                 {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -388,7 +469,8 @@ function GroupTree({
                 title="Folder actions"
                 onClick={(event) => {
                   event.stopPropagation()
-                  onFolderMenu(child.path)
+                  const rect = event.currentTarget.getBoundingClientRect()
+                  onFolderMenu(child.path, { x: rect.left, y: rect.bottom + 4 })
                 }}
               >
                 <MoreHorizontal size={14} />
@@ -398,6 +480,7 @@ function GroupTree({
               <GroupTree
                 node={child}
                 expandedFolders={expandedFolders}
+                activeSpaceName={activeSpaceName}
                 activeHostAlias={activeHostAlias}
                 onToggleFolder={onToggleFolder}
                 onConnect={onConnect}
@@ -416,7 +499,7 @@ function GroupTree({
         )
       })}
 
-      {node.hosts.map((host) => (
+      {visibleHosts.map((host) => (
         <li key={host.alias}>
           <div
             className={
@@ -496,6 +579,19 @@ function findHostByAlias(model: SshConfigModel, alias: string): HostEntry | null
   return collectAllHosts(model).find((host) => host.alias === alias) ?? null
 }
 
+function findGroupByPath(node: GroupNode, groupPath: string): GroupNode | null {
+  if (node.path === groupPath) return node
+  for (const child of node.children) {
+    const found = findGroupByPath(child, groupPath)
+    if (found) return found
+  }
+  return null
+}
+
+function filterHostsBySpace(hosts: HostEntry[], activeSpaceName: string): HostEntry[] {
+  return hosts.filter((host) => host.effectiveSpaceName === activeSpaceName)
+}
+
 function App(): React.JSX.Element {
   const [model, setModel] = useState<SshConfigModel | null>(null)
   const [tabs, setTabs] = useState<SessionTab[]>([])
@@ -510,10 +606,18 @@ function App(): React.JSX.Element {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(['Global']))
   const [isFavoritesExpanded, setIsFavoritesExpanded] = useState(true)
   const [isUnassignedExpanded, setIsUnassignedExpanded] = useState(true)
+  const [activeSpaceName, setActiveSpaceName] = useState('Default')
 
   const [editingFolderPath, setEditingFolderPath] = useState<string | null>(null)
   const [newFolderName, setNewFolderName] = useState('')
   const [folderError, setFolderError] = useState<string | null>(null)
+  const [folderContextMenu, setFolderContextMenu] = useState<{
+    groupPath: string
+    x: number
+    y: number
+  } | null>(null)
+  const [movingFolderPath, setMovingFolderPath] = useState<string | null>(null)
+  const [moveTargetSpaceName, setMoveTargetSpaceName] = useState('')
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [settingsConfigPath, setSettingsConfigPath] = useState('')
@@ -534,12 +638,37 @@ function App(): React.JSX.Element {
     [tabs, activeTabId]
   )
   const activeHostAlias = activeTab?.label ?? null
-  const favoriteHosts = useMemo(() => (model ? collectFavoriteHosts(model) : []), [model])
+  const favoriteHosts = useMemo(
+    () => (model ? filterHostsBySpace(collectFavoriteHosts(model), activeSpaceName) : []),
+    [model, activeSpaceName]
+  )
+
+  const activeSpaceRoot = useMemo(() => {
+    if (!model || activeSpaceName === 'Default') return null
+    return model.spaces.find((space) => space.name === activeSpaceName) ?? null
+  }, [model, activeSpaceName])
+
+  const activeTreeNode = useMemo(() => {
+    if (!model) return null
+    if (!activeSpaceRoot) return model.globalRoot
+    return findGroupByPath(model.globalRoot, activeSpaceRoot.rootGroupPath)
+  }, [model, activeSpaceRoot])
+
+  const activeUnassignedHosts = useMemo(() => {
+    if (!model) return []
+    return filterHostsBySpace(model.unassigned, activeSpaceName)
+  }, [model, activeSpaceName])
 
   const groupPickTree = useMemo(() => {
     if (!model) return null
     return buildGroupPickTree(model.availableGroups)
   }, [model])
+
+  useEffect(() => {
+    if (!model) return
+    if (model.availableSpaceNames.includes(activeSpaceName)) return
+    setActiveSpaceName('Default')
+  }, [model, activeSpaceName])
 
   useEffect(() => {
     const onMove = (event: MouseEvent): void => {
@@ -609,6 +738,16 @@ function App(): React.JSX.Element {
         return
       }
 
+      if (movingFolderPath) {
+        setMovingFolderPath(null)
+        return
+      }
+
+      if (folderContextMenu) {
+        setFolderContextMenu(null)
+        return
+      }
+
       if (isSettingsOpen) {
         setIsSettingsOpen(false)
       }
@@ -616,7 +755,7 @@ function App(): React.JSX.Element {
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [hostKeyAlert, assigningHost, hostSettingsDraft, editingFolderPath, isSettingsOpen])
+  }, [hostKeyAlert, assigningHost, hostSettingsDraft, editingFolderPath, movingFolderPath, folderContextMenu, isSettingsOpen])
 
   useEffect(() => {
     const boot = async (): Promise<void> => {
@@ -706,7 +845,15 @@ function App(): React.JSX.Element {
     }
   }
 
-  const openFolderMenu = (groupPath: string): void => {
+  const openFolderMenu = (groupPath: string, anchor: { x: number; y: number }): void => {
+    setFolderContextMenu({
+      groupPath,
+      x: anchor.x,
+      y: anchor.y
+    })
+  }
+
+  const openFolderEditor = (groupPath: string): void => {
     setEditingFolderPath(groupPath)
     setNewFolderName('')
     setFolderError(null)
@@ -753,6 +900,81 @@ function App(): React.JSX.Element {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       setFolderError(message)
+    }
+  }
+
+  const convertFolderToSpace = async (groupPath: string): Promise<void> => {
+    if (!model) return
+
+    const node = findGroupByPath(model.globalRoot, groupPath)
+    if (!node) {
+      setConnectionError('Folder not found.')
+      return
+    }
+
+    try {
+      setConnectionError(null)
+      const next = await window.api.convertGroupToSpace(groupPath, node.name)
+      setModel(next)
+      setActiveSpaceName(node.name)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setConnectionError(message)
+    }
+  }
+
+  const convertSpaceToFolder = async (groupPath: string): Promise<void> => {
+    try {
+      setConnectionError(null)
+      const next = await window.api.convertSpaceToGroup(groupPath)
+      setModel(next)
+      setActiveSpaceName('Default')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setConnectionError(message)
+    }
+  }
+
+  const openMoveFolderToSpaceDialog = (groupPath: string): void => {
+    if (!model) return
+
+    const currentNode = findGroupByPath(model.globalRoot, groupPath)
+    if (!currentNode) return
+
+    const availableSpaces = ['Default', ...model.spaces.map((space) => space.name)].filter(
+      (spaceName) => spaceName !== currentNode.effectiveSpaceName
+    )
+
+    if (availableSpaces.length === 0) {
+      setConnectionError('No destination spaces available.')
+      return
+    }
+
+    setMoveTargetSpaceName(availableSpaces[0])
+    setMovingFolderPath(groupPath)
+  }
+
+  const moveFolderToSpace = async (): Promise<void> => {
+    if (!model || !movingFolderPath || !moveTargetSpaceName) return
+
+    const destinationParentPath =
+      moveTargetSpaceName === 'Default'
+        ? 'Global'
+        : (model.spaces.find((space) => space.name === moveTargetSpaceName)?.rootGroupPath ?? null)
+    if (!destinationParentPath) {
+      setConnectionError('Destination space not found.')
+      return
+    }
+
+    try {
+      setConnectionError(null)
+      const next = await window.api.moveGroup(movingFolderPath, destinationParentPath)
+      setModel(next)
+      setMovingFolderPath(null)
+      setMoveTargetSpaceName('')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setConnectionError(message)
     }
   }
 
@@ -822,6 +1044,8 @@ function App(): React.JSX.Element {
       pingTarget: '',
       isFavorite: false,
       options: createEmptyHostOptions(),
+      sourceSpaceName: null,
+      effectiveSpaceName: activeSpaceName,
       sourceGroupPath: null,
       effectiveGroupPath: 'Global',
       assignmentReason: 'no-comment'
@@ -965,6 +1189,31 @@ function App(): React.JSX.Element {
     }
   }
 
+  const contextMenuFolderNode =
+    model && folderContextMenu ? findGroupByPath(model.globalRoot, folderContextMenu.groupPath) : null
+
+  const destinationSpaceOptions =
+    model && movingFolderPath
+      ? (() => {
+          const movingNode = findGroupByPath(model.globalRoot, movingFolderPath)
+          const currentSpaceName = movingNode?.effectiveSpaceName ?? 'Default'
+          const options = ['Default', ...model.spaces.map((space) => space.name)]
+          return options.filter((spaceName) => spaceName !== currentSpaceName)
+        })()
+      : []
+
+  const activeSpaceOptions: SpaceOption[] = model
+    ? model.availableSpaceNames.map((spaceName) => ({
+        value: spaceName,
+        label: spaceName
+      }))
+    : []
+
+  const destinationSpaceSelectOptions: SpaceOption[] = destinationSpaceOptions.map((spaceName) => ({
+    value: spaceName,
+    label: spaceName
+  }))
+
   if (!model) {
     return <div className="loading">Loading SSH configuration...</div>
   }
@@ -1003,13 +1252,14 @@ function App(): React.JSX.Element {
 
         {isSidebarCollapsed ? null : (
           <>
-            <div className="row folder-row folder-root clickable" onClick={() => setIsFavoritesExpanded((current) => !current)}>
-              <div className="row-main">
-                {isFavoritesExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                {isFavoritesExpanded ? <FolderOpen size={14} /> : <Folder size={14} />}
-                <span>Favorites</span>
+            <div className="sidebar-content">
+              <div className="row folder-row folder-root clickable" onClick={() => setIsFavoritesExpanded((current) => !current)}>
+                <div className="row-main">
+                  {isFavoritesExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                  {isFavoritesExpanded ? <FolderOpen size={14} /> : <Folder size={14} />}
+                  <span>Favorites</span>
+                </div>
               </div>
-            </div>
 
             {isFavoritesExpanded ? (
               <ul className="group-tree">
@@ -1056,45 +1306,54 @@ function App(): React.JSX.Element {
             ) : null}
 
             <div
-              className={dropTargetPath === 'Global' ? 'row folder-row folder-root clickable drop-target' : 'row folder-row folder-root clickable'}
-              onClick={() => toggleFolder('Global')}
+              className={
+                dropTargetPath === (activeSpaceRoot?.rootGroupPath ?? 'Global')
+                  ? 'row folder-row folder-root clickable drop-target'
+                  : 'row folder-row folder-root clickable'
+              }
+              onClick={() => {
+                if (activeSpaceRoot) return
+                toggleFolder('Global')
+              }}
               onContextMenu={(event) => {
                 event.preventDefault()
-                openFolderMenu('Global')
+                openFolderMenu(activeSpaceRoot?.rootGroupPath ?? 'Global', { x: event.clientX, y: event.clientY })
               }}
               onDragOver={(event) => {
                 event.preventDefault()
-                handleDragOverFolder('Global')
+                handleDragOverFolder(activeSpaceRoot?.rootGroupPath ?? 'Global')
               }}
-              onDragLeave={() => handleDragLeaveFolder('Global')}
+              onDragLeave={() => handleDragLeaveFolder(activeSpaceRoot?.rootGroupPath ?? 'Global')}
               onDrop={(event) => {
                 event.preventDefault()
                 const payload = getDragPayload(event)
                 if (!payload) return
-                void onDropToFolder(payload, 'Global')
+                void onDropToFolder(payload, activeSpaceRoot?.rootGroupPath ?? 'Global')
               }}
             >
               <div className="row-main">
-                {expandedFolders.has('Global') ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                {expandedFolders.has('Global') ? <FolderOpen size={14} /> : <Folder size={14} />}
-                <span>Global</span>
+                {activeSpaceRoot ? <FolderOpen size={14} /> : expandedFolders.has('Global') ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                {activeSpaceRoot ? null : expandedFolders.has('Global') ? <FolderOpen size={14} /> : <Folder size={14} />}
+                <span>{activeSpaceName === 'Default' ? 'Global' : activeSpaceName}</span>
               </div>
               <button
                 className="row-action clickable"
                 title="Folder actions"
                 onClick={(event) => {
                   event.stopPropagation()
-                  openFolderMenu('Global')
+                  const rect = event.currentTarget.getBoundingClientRect()
+                  openFolderMenu(activeSpaceRoot?.rootGroupPath ?? 'Global', { x: rect.left, y: rect.bottom + 4 })
                 }}
               >
                 <MoreHorizontal size={14} />
               </button>
             </div>
 
-            {expandedFolders.has('Global') ? (
+            {(activeSpaceRoot || expandedFolders.has('Global')) && activeTreeNode ? (
               <GroupTree
-                node={model.globalRoot}
+                node={activeTreeNode}
                 expandedFolders={expandedFolders}
+                activeSpaceName={activeSpaceName}
                 activeHostAlias={activeHostAlias}
                 onToggleFolder={toggleFolder}
                 onConnect={connectHost}
@@ -1133,7 +1392,7 @@ function App(): React.JSX.Element {
 
             {isUnassignedExpanded ? (
               <ul className="group-tree">
-                {model.unassigned.map((host) => (
+                {activeUnassignedHosts.map((host) => (
                   <li key={host.alias}>
                     <div
                       className={
@@ -1171,9 +1430,29 @@ function App(): React.JSX.Element {
                     </div>
                   </li>
                 ))}
-                {model.unassigned.length === 0 ? <li className="empty">No unassigned hosts</li> : null}
+                {activeUnassignedHosts.length === 0 ? <li className="empty">No unassigned hosts</li> : null}
               </ul>
             ) : null}
+
+            </div>
+
+            <div className="space-selector-wrap">
+              <Select
+                classNamePrefix="space-select"
+                value={activeSpaceOptions.find((option) => option.value === activeSpaceName) ?? null}
+                options={activeSpaceOptions}
+                onChange={(option) => {
+                  if (option) {
+                    setActiveSpaceName(option.value)
+                  }
+                }}
+                styles={SPACE_SELECT_STYLES}
+                menuPortalTarget={document.body}
+                menuPlacement="top"
+                menuPosition="fixed"
+                isSearchable={false}
+              />
+            </div>
           </>
         )}
       </aside>
@@ -1230,6 +1509,93 @@ function App(): React.JSX.Element {
           )}
         </div>
       </main>
+
+      {folderContextMenu ? (
+        <div className="context-menu-overlay" onClick={() => setFolderContextMenu(null)}>
+          <div
+            className="context-menu"
+            style={{ left: folderContextMenu.x, top: folderContextMenu.y }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              className="context-menu-item"
+              onClick={() => {
+                const path = folderContextMenu.groupPath
+                setFolderContextMenu(null)
+                openFolderEditor(path)
+              }}
+            >
+              Edit
+            </button>
+            {folderContextMenu.groupPath !== 'Global' && contextMenuFolderNode?.spaceName ? (
+              <button
+                className="context-menu-item"
+                onClick={() => {
+                  const path = folderContextMenu.groupPath
+                  setFolderContextMenu(null)
+                  void convertSpaceToFolder(path)
+                }}
+              >
+                Convert to folder
+              </button>
+            ) : null}
+            {folderContextMenu.groupPath !== 'Global' && !contextMenuFolderNode?.spaceName ? (
+              <button
+                className="context-menu-item"
+                onClick={() => {
+                  const path = folderContextMenu.groupPath
+                  setFolderContextMenu(null)
+                  void convertFolderToSpace(path)
+                }}
+              >
+                Convert to space
+              </button>
+            ) : null}
+            {folderContextMenu.groupPath !== 'Global' ? (
+              <button
+                className="context-menu-item"
+                onClick={() => {
+                  const path = folderContextMenu.groupPath
+                  setFolderContextMenu(null)
+                  openMoveFolderToSpaceDialog(path)
+                }}
+              >
+                Move folder to space
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {movingFolderPath ? (
+        <div className="modal-overlay" onClick={() => setMovingFolderPath(null)}>
+          <div className="modal" onClick={(event) => event.stopPropagation()}>
+            <h3>Move folder to space</h3>
+            <div className="hint">Folder: {movingFolderPath}</div>
+            <div className="config-row">
+              <Select
+                classNamePrefix="space-select"
+                value={destinationSpaceSelectOptions.find((option) => option.value === moveTargetSpaceName) ?? null}
+                options={destinationSpaceSelectOptions}
+                onChange={(option) => {
+                  setMoveTargetSpaceName(option?.value ?? '')
+                }}
+                styles={SPACE_SELECT_STYLES}
+                menuPortalTarget={document.body}
+                menuPlacement="top"
+                menuPosition="fixed"
+                isSearchable={false}
+              />
+            </div>
+            <div className="modal-actions">
+              <button onClick={() => setMovingFolderPath(null)}>Cancel</button>
+              <button onClick={() => void moveFolderToSpace()} disabled={!moveTargetSpaceName}>
+                Move
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {assigningHost && hostSettingsDraft ? (
         <div

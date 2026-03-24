@@ -6,6 +6,8 @@ import {
   addHostInConfig,
   assignHostGroupInConfig,
   clearHostGroupInConfig,
+  convertGroupToSpaceInConfig,
+  convertSpaceToGroupInConfig,
   createGroupInConfig,
   deleteHostInConfig,
   deleteGroupInConfig,
@@ -26,6 +28,8 @@ const CHANNELS = {
   moveGroup: 'ssh:moveGroup',
   createGroup: 'ssh:createGroup',
   deleteGroup: 'ssh:deleteGroup',
+  convertGroupToSpace: 'ssh:convertGroupToSpace',
+  convertSpaceToGroup: 'ssh:convertSpaceToGroup',
   deleteHost: 'ssh:deleteHost',
   addHost: 'ssh:addHost',
   updateHostSettings: 'ssh:updateHostSettings',
@@ -151,6 +155,21 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle(CHANNELS.deleteGroup, async (_event, payload: { groupPath: string }) => {
     const settings = getSettings()
     await deleteGroupInConfig(settings.configFilePath, payload.groupPath)
+    return parseSshConfig(settings.configFilePath)
+  })
+
+  ipcMain.handle(
+    CHANNELS.convertGroupToSpace,
+    async (_event, payload: { groupPath: string; spaceName: string }) => {
+      const settings = getSettings()
+      await convertGroupToSpaceInConfig(settings.configFilePath, payload.groupPath, payload.spaceName)
+      return parseSshConfig(settings.configFilePath)
+    }
+  )
+
+  ipcMain.handle(CHANNELS.convertSpaceToGroup, async (_event, payload: { groupPath: string }) => {
+    const settings = getSettings()
+    await convertSpaceToGroupInConfig(settings.configFilePath, payload.groupPath)
     return parseSshConfig(settings.configFilePath)
   })
 
