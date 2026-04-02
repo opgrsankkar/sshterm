@@ -9,13 +9,20 @@ app.setName('sshterm')
 const UI_CHANNELS = {
   openSettings: 'ui:openSettings',
   openActiveDeviceSettings: 'ui:openActiveDeviceSettings',
-  toggleSidebar: 'ui:toggleSidebar'
+  toggleSidebar: 'ui:toggleSidebar',
+  closeActiveTab: 'ui:closeActiveTab'
 } as const
 
 function openSettingsFromMenu(): void {
   const focused = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
   if (!focused) return
-  focused.webContents.send('ui:openSettings')
+  focused.webContents.send(UI_CHANNELS.openSettings)
+}
+
+function closeActiveTabFromMenu(): void {
+  const focused = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+  if (!focused) return
+  focused.webContents.send(UI_CHANNELS.closeActiveTab)
 }
 
 function setupApplicationMenu(): void {
@@ -51,6 +58,16 @@ function setupApplicationMenu(): void {
         { role: 'paste' },
         { role: 'delete' },
         { role: 'selectAll' }
+      ]
+    },
+    {
+      label: 'File',
+      submenu: [
+        {
+          label: 'Close Tab',
+          accelerator: 'CommandOrControl+W',
+          click: () => closeActiveTabFromMenu()
+        }
       ]
     },
     {
@@ -106,6 +123,12 @@ function createWindow(): void {
     if (input.key.toLowerCase() === 's') {
       event.preventDefault()
       mainWindow.webContents.send(UI_CHANNELS.toggleSidebar)
+      return
+    }
+
+    if (input.key.toLowerCase() === 'w') {
+      event.preventDefault()
+      mainWindow.webContents.send(UI_CHANNELS.closeActiveTab)
     }
   })
 

@@ -29,7 +29,8 @@ const CHANNELS = {
   sessionHostKeyChanged: 'session:hostKeyChanged',
   openSettings: 'ui:openSettings',
   openActiveDeviceSettings: 'ui:openActiveDeviceSettings',
-  toggleSidebar: 'ui:toggleSidebar'
+  toggleSidebar: 'ui:toggleSidebar',
+  closeActiveTab: 'ui:closeActiveTab'
 } as const
 
 // Custom APIs for renderer
@@ -156,6 +157,13 @@ const api = {
     }
     electronAPI.ipcRenderer.on(CHANNELS.toggleSidebar, wrapped)
     return () => electronAPI.ipcRenderer.removeListener(CHANNELS.toggleSidebar, wrapped)
+  },
+  onCloseActiveTab: (listener: () => void): (() => void) => {
+    const wrapped = (): void => {
+      listener()
+    }
+    electronAPI.ipcRenderer.on(CHANNELS.closeActiveTab, wrapped)
+    return () => electronAPI.ipcRenderer.removeListener(CHANNELS.closeActiveTab, wrapped)
   }
 }
 

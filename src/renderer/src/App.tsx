@@ -664,6 +664,23 @@ function App(): React.JSX.Element {
     return buildGroupPickTree(model.availableGroups)
   }, [model])
 
+  async function closeTab(tab: SessionTab): Promise<void> {
+    setTabs((previous) => {
+      const remaining = previous.filter((entry) => entry.id !== tab.id)
+      setActiveTabId((current) => {
+        if (current !== tab.id) return current
+        return remaining.length ? remaining[remaining.length - 1].id : null
+      })
+      return remaining
+    })
+
+    try {
+      await window.api.closeSession(tab.sessionId)
+    } catch {
+      // best effort: session may already be closed
+    }
+  }
+
   useEffect(() => {
     if (!model) return
     if (model.availableSpaceNames.includes(activeSpaceName)) return
@@ -709,6 +726,14 @@ function App(): React.JSX.Element {
     })
     return () => dispose()
   }, [])
+
+  useEffect(() => {
+    const dispose = window.api.onCloseActiveTab(() => {
+      if (!activeTab) return
+      void closeTab(activeTab)
+    })
+    return () => dispose()
+  }, [activeTab])
 
   useEffect(() => {
     const dispose = window.api.onSessionHostKeyChanged((payload) => {
@@ -825,23 +850,6 @@ function App(): React.JSX.Element {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       setConnectionError(`Failed to open session for ${alias}: ${message}`)
-    }
-  }
-
-  const closeTab = async (tab: SessionTab): Promise<void> => {
-    setTabs((previous) => {
-      const remaining = previous.filter((entry) => entry.id !== tab.id)
-      setActiveTabId((current) => {
-        if (current !== tab.id) return current
-        return remaining.length ? remaining[remaining.length - 1].id : null
-      })
-      return remaining
-    })
-
-    try {
-      await window.api.closeSession(tab.sessionId)
-    } catch {
-      // best effort: session may already be closed
     }
   }
 
@@ -1599,7 +1607,7 @@ function App(): React.JSX.Element {
 
       {assigningHost && hostSettingsDraft ? (
         <div
-          className="modal-overlay"
+          className="modal-overlay modal-overlay-soft"
           onClick={() => {
             setAssigningHost(null)
             setHostSettingsDraft(null)

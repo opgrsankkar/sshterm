@@ -55,6 +55,7 @@ interface SshtermApi {
   onOpenSettings: (listener: () => void) => () => void
   onOpenActiveDeviceSettings: (listener: () => void) => () => void
   onToggleSidebar: (listener: () => void) => () => void
+  onCloseActiveTab: (listener: () => void) => () => void
 }
 
 declare global {
