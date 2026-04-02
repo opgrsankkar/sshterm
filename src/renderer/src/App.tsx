@@ -874,6 +874,13 @@ function App(): React.JSX.Element {
     return () => dispose()
   }, [])
 
+    const dispose = window.api.onCloseActiveTab(() => {
+      if (!activeTab) return
+      void closeTab(activeTab)
+    })
+    return () => dispose()
+  }, [activeTab])
+
   useEffect(() => {
     const dispose = window.api.onSessionHostKeyChanged((payload) => {
       setHostKeyAlert(payload)
@@ -1070,7 +1077,6 @@ function App(): React.JSX.Element {
       // best effort: session may already be closed
     }
   }
-
   const openFolderMenu = (groupPath: string, anchor: { x: number; y: number }): void => {
     setFolderContextMenu({
       groupPath,
@@ -1940,7 +1946,7 @@ function App(): React.JSX.Element {
 
       {assigningHost && hostSettingsDraft ? (
         <div
-          className="modal-overlay"
+          className="modal-overlay modal-overlay-soft"
           onClick={() => {
             setAssigningHost(null)
             setHostSettingsDraft(null)

@@ -16,13 +16,20 @@ const UI_CHANNELS = {
   activatePreviousTab: 'ui:activatePreviousTab',
   activateNextSpace: 'ui:activateNextSpace',
   activatePreviousSpace: 'ui:activatePreviousSpace',
-  openHostSearch: 'ui:openHostSearch'
+  openHostSearch: 'ui:openHostSearch',
+  closeActiveTab: 'ui:closeActiveTab'
 } as const
 
 function openSettingsFromMenu(): void {
   const focused = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
   if (!focused) return
-  focused.webContents.send('ui:openSettings')
+  focused.webContents.send(UI_CHANNELS.openSettings)
+}
+
+function closeActiveTabFromMenu(): void {
+  const focused = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+  if (!focused) return
+  focused.webContents.send(UI_CHANNELS.closeActiveTab)
 }
 
 function setupApplicationMenu(): void {
@@ -58,6 +65,16 @@ function setupApplicationMenu(): void {
         { role: 'paste' },
         { role: 'delete' },
         { role: 'selectAll' }
+      ]
+    },
+    {
+      label: 'File',
+      submenu: [
+        {
+          label: 'Close Tab',
+          accelerator: 'CommandOrControl+W',
+          click: () => closeActiveTabFromMenu()
+        }
       ]
     },
     {
@@ -153,6 +170,12 @@ function createWindow(): void {
     if (input.key.toLowerCase() === 't') {
       event.preventDefault()
       mainWindow.webContents.send(UI_CHANNELS.openHostSearch)
+      return
+    }
+
+    if (input.key.toLowerCase() === 'w') {
+      event.preventDefault()
+      mainWindow.webContents.send(UI_CHANNELS.closeActiveTab)
     }
   })
 
