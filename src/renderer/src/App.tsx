@@ -733,17 +733,16 @@ function App(): React.JSX.Element {
 
   const cycleTabs = useCallback(
     (direction: 1 | -1): void => {
-      const order = getTabAccessOrder(tabs, activeTabId, tabAccessHistoryRef.current)
-      if (order.length < 2) return
-
-      const activeId = activeTabId ?? order[0]
       let cycle = tabSwitchCycleRef.current
-      if (
-        !cycle ||
-        cycle.direction !== direction ||
-        cycle.order.length !== order.length ||
-        cycle.order.some((tabId, index) => tabId !== order[index])
-      ) {
+
+      // Only build a new snapshot when starting a fresh cycle or reversing direction.
+      // While a cycle is active we deliberately keep the frozen order so that each
+      // Ctrl+Tab press advances through the full list rather than re-snapshotting
+      // from the (now-updated) history and bouncing between two tabs.
+      if (!cycle || cycle.direction !== direction) {
+        const order = getTabAccessOrder(tabs, activeTabId, tabAccessHistoryRef.current)
+        if (order.length < 2) return
+        const activeId = activeTabId ?? order[0]
         const startIndex = Math.max(0, order.indexOf(activeId))
         cycle = { order, index: startIndex, direction }
       }
@@ -752,11 +751,7 @@ function App(): React.JSX.Element {
       const nextTabId = cycle.order[nextIndex] ?? null
       if (!nextTabId) return
 
-      tabSwitchCycleRef.current = {
-        order: cycle.order,
-        index: nextIndex,
-        direction
-      }
+      tabSwitchCycleRef.current = { order: cycle.order, index: nextIndex, direction }
       activateTab(nextTabId, { preserveCycle: true })
     },
     [activateTab, tabs, activeTabId]
