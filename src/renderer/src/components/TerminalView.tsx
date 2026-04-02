@@ -11,6 +11,51 @@ type RuntimeFitAddon = {
   observeResize?: () => void
 }
 
+interface TerminalTheme {
+  background: string
+  foreground: string
+  cursor: string
+}
+
+function getPreferredTerminalTheme(): TerminalTheme {
+  const prefersLight = window.matchMedia('(prefers-color-scheme: light)').matches
+  if (prefersLight) {
+    return {
+      background: '#ffffff',
+      foreground: '#1f3249',
+      cursor: '#2f67a7'
+    }
+  }
+
+  return {
+    background: '#000000',
+    foreground: '#d7deea',
+    cursor: '#9bb4d8'
+  }
+}
+
+function applyThemeToTerminal(terminal: RuntimeTerminal, theme: TerminalTheme): void {
+  const maybeTerminal = terminal as RuntimeTerminal & {
+    options?: { theme?: TerminalTheme }
+    setOption?: (key: string, value: unknown) => void
+    setTheme?: (value: TerminalTheme) => void
+    rows?: number
+    refresh?: (start: number, end: number) => void
+  }
+
+  if (typeof maybeTerminal.setTheme === 'function') {
+    maybeTerminal.setTheme(theme)
+  } else if (typeof maybeTerminal.setOption === 'function') {
+    maybeTerminal.setOption('theme', theme)
+  } else if (maybeTerminal.options) {
+    maybeTerminal.options.theme = theme
+  }
+
+  if (typeof maybeTerminal.refresh === 'function') {
+    maybeTerminal.refresh(0, Math.max(0, (maybeTerminal.rows ?? 1) - 1))
+  }
+}
+
 async function loadGhostty(): Promise<Ghostty> {
   const wasmFactory = ghosttyWasmInit as unknown as (
     imports?: WebAssembly.Imports
@@ -35,7 +80,8 @@ async function loadGhostty(): Promise<Ghostty> {
 }
 
 function createTerminal(
-  scrollbackLines: number
+  scrollbackLines: number,
+  theme: TerminalTheme
 ): Promise<{ terminal: RuntimeTerminal; engine: 'ghostty' | 'xterm'; errorMessage?: string }> {
   return loadGhostty()
     .then((ghostty) => {
@@ -45,11 +91,7 @@ function createTerminal(
         scrollback: scrollbackLines,
         ghostty,
         fontFamily: 'Menlo, Monaco, Consolas, monospace',
-        theme: {
-          background: '#000000',
-          foreground: '#d7deea',
-          cursor: '#9bb4d8'
-        }
+        theme
       })
       return { terminal, engine: 'ghostty' as const }
     })
@@ -60,11 +102,7 @@ function createTerminal(
         convertEol: true,
         scrollback: scrollbackLines,
         fontFamily: 'Menlo, Monaco, Consolas, monospace',
-        theme: {
-          background: '#000000',
-          foreground: '#d7deea',
-          cursor: '#9bb4d8'
-        }
+        theme
       })
       return {
         terminal,
@@ -89,6 +127,8 @@ export default function TerminalView({
 
   useEffect(() => {
     let observer: ResizeObserver | null = null
+    let mediaQuery: MediaQueryList | null = null
+    let handleAppearanceChange: ((event: MediaQueryListEvent) => void) | null = null
     let removeData: (() => void) | null = null
     let removeExit: (() => void) | null = null
     let disposableData: { dispose: () => void } | null = null
@@ -96,7 +136,8 @@ export default function TerminalView({
     let cancelled = false
 
     void (async () => {
-      const created = await createTerminal(scrollbackLines)
+      const initialTheme = getPreferredTerminalTheme()
+      const created = await createTerminal(scrollbackLines, initialTheme)
       if (cancelled) return
 
       terminal = created.terminal
@@ -125,6 +166,13 @@ export default function TerminalView({
 
       terminalRef.current = terminal
       fitAddonRef.current = fitAddon
+
+      mediaQuery = window.matchMedia('(prefers-color-scheme: light)')
+      handleAppearanceChange = () => {
+        if (!terminal) return
+        applyThemeToTerminal(terminal, getPreferredTerminalTheme())
+      }
+      mediaQuery.addEventListener('change', handleAppearanceChange)
 
       removeData = window.api.onSessionData((payload) => {
         if (payload.sessionId !== sessionId) return
@@ -159,6 +207,9 @@ export default function TerminalView({
     return () => {
       cancelled = true
       observer?.disconnect()
+      if (mediaQuery && handleAppearanceChange) {
+        mediaQuery.removeEventListener('change', handleAppearanceChange)
+      }
       disposableData?.dispose()
       removeData?.()
       removeExit?.()

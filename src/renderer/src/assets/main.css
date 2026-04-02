@@ -2,6 +2,7 @@
 @import '@xterm/xterm/css/xterm.css';
 
 :root {
+  --ui-color-scheme: dark;
   --ui-bg-base: #050608;
   --ui-bg-panel: #0a0d12;
   --ui-bg-elevated: #0f141d;
@@ -17,6 +18,111 @@
   --ui-secondary-bg: #182131;
   --ui-secondary-hover: #1e2a3e;
   --ui-secondary-border: #324761;
+  --ui-input-text: #e5ebf5;
+  --ui-accent-contrast: #d7e8ff;
+  --ui-heading: #b6c8e2;
+  --ui-icon: #a9bedc;
+  --ui-icon-muted: #8ea4c4;
+  --ui-icon-active: #9ec2ef;
+  --ui-reachability-dot: #e7b5b5;
+  --ui-danger-bg: #261414;
+  --ui-danger-border: #5f2a2a;
+  --ui-danger-text: #e7b5b5;
+  --ui-host-hover-bg: #0f1724;
+  --ui-host-hover-border: #1f3b5a;
+  --ui-host-active-bg: #11253c;
+  --ui-host-active-border: #2d5d91;
+  --ui-host-unassigned: #d3dfef;
+  --ui-tab-active-bg: #0c1523;
+  --ui-tab-active-border: #284062;
+  --ui-tab-active-text: #d9e4f4;
+  --ui-tab-icon: #9db6d9;
+  --ui-loading-text: #94a3c4;
+  --ui-modal-details: #b5c6dd;
+  --ui-group-list-bg: #0d121a;
+  --ui-secondary-button-text: #c1d0e4;
+  --ui-danger-action-bg: #2a1518;
+  --ui-danger-action-border: #6b2f36;
+  --ui-danger-action-text: #efc0c6;
+  --ui-favorite-text: #c7d7ee;
+  --ui-toggle-knob: #c7d7ee;
+  --ui-folder-hover-bg: #0e1622;
+  --ui-folder-hover-border: #1d3450;
+  --ui-tab-hover-bg: #121b29;
+  --ui-tab-hover-border: #27507b;
+  --ui-action-hover-bg: #122338;
+  --ui-action-hover-border: #295883;
+  --ui-drop-target-bg: #18314b;
+  --ui-drop-target-border: #3b78b6;
+  --ui-danger-action-hover-bg: #351a1f;
+  --ui-danger-action-hover-border: #7c3941;
+  --ui-space-selector-bg: #08101d;
+  --ui-select-control-bg: #0c1523;
+  --ui-select-menu-bg: #0b1422;
+  --ui-select-option-hover-bg: #14243a;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --ui-color-scheme: light;
+    --ui-bg-base: #f4f8fd;
+    --ui-bg-panel: #ffffff;
+    --ui-bg-elevated: #f7fbff;
+    --ui-bg-hover: #eef4fc;
+    --ui-border-soft: #d4e0ef;
+    --ui-border-strong: #bccde1;
+    --ui-text: #1d2b3d;
+    --ui-text-muted: #5e738f;
+    --ui-field-bg: #f1f6fc;
+    --ui-accent: #2f67a7;
+    --ui-accent-hover: #255a95;
+    --ui-accent-border: #3f77b8;
+    --ui-secondary-bg: #e9f1fb;
+    --ui-secondary-hover: #deebf9;
+    --ui-secondary-border: #b9cce4;
+    --ui-input-text: #1f3249;
+    --ui-accent-contrast: #eef5ff;
+    --ui-heading: #3f5875;
+    --ui-icon: #5a7ea6;
+    --ui-icon-muted: #6786aa;
+    --ui-icon-active: #2f67a7;
+    --ui-reachability-dot: #c95b68;
+    --ui-danger-bg: #fff1f3;
+    --ui-danger-border: #d88a93;
+    --ui-danger-text: #8a2f3a;
+    --ui-host-hover-bg: #edf4fc;
+    --ui-host-hover-border: #c0d5ec;
+    --ui-host-active-bg: #dfeeff;
+    --ui-host-active-border: #78a4d1;
+    --ui-host-unassigned: #2d4058;
+    --ui-tab-active-bg: #e4effb;
+    --ui-tab-active-border: #7ea7d1;
+    --ui-tab-active-text: #1f3854;
+    --ui-tab-icon: #5f81a8;
+    --ui-loading-text: #637f9f;
+    --ui-modal-details: #3e5673;
+    --ui-group-list-bg: #f2f7fd;
+    --ui-secondary-button-text: #315170;
+    --ui-danger-action-bg: #fdecef;
+    --ui-danger-action-border: #d6939c;
+    --ui-danger-action-text: #8a2f3a;
+    --ui-favorite-text: #406182;
+    --ui-toggle-knob: #ffffff;
+    --ui-folder-hover-bg: #edf4fc;
+    --ui-folder-hover-border: #c0d5ec;
+    --ui-tab-hover-bg: #e9f2fc;
+    --ui-tab-hover-border: #8aafd8;
+    --ui-action-hover-bg: #e2eefc;
+    --ui-action-hover-border: #7ea7d1;
+    --ui-drop-target-bg: #d8e8fa;
+    --ui-drop-target-border: #4d83bf;
+    --ui-danger-action-hover-bg: #f8dee3;
+    --ui-danger-action-hover-border: #cb7f89;
+    --ui-space-selector-bg: #f0f6fe;
+    --ui-select-control-bg: #f1f6fc;
+    --ui-select-menu-bg: #ffffff;
+    --ui-select-option-hover-bg: #e6f0fb;
+  }
 }
 
 body {
@@ -24,6 +130,7 @@ body {
   background: var(--ui-bg-base);
   color: var(--ui-text);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color-scheme: var(--ui-color-scheme);
   scrollbar-color: var(--ui-secondary-border) var(--ui-bg-panel);
   scrollbar-width: thin;
 }
@@ -101,7 +208,7 @@ body {
 .toggle-sidebar {
   background: var(--ui-secondary-bg);
   border: 1px solid var(--ui-secondary-border);
-  color: #a9bedc;
+  color: var(--ui-icon);
   border-radius: 6px;
   width: 28px;
   height: 28px;
@@ -117,7 +224,7 @@ body {
 }
 
 .sidebar-resizer:hover {
-  background: #244467;
+  background: var(--ui-accent);
 }
 
 .config-row {
@@ -130,7 +237,7 @@ body {
   flex: 1;
   background: var(--ui-field-bg);
   border: 1px solid var(--ui-border-strong);
-  color: #e5ebf5;
+  color: var(--ui-input-text);
   border-radius: 6px;
   padding: 8px;
   outline: none;
@@ -140,7 +247,7 @@ body {
   flex: 1;
   background: var(--ui-field-bg);
   border: 1px solid var(--ui-border-strong);
-  color: #e5ebf5;
+  color: var(--ui-input-text);
   border-radius: 6px;
   padding: 8px;
   outline: none;
@@ -165,7 +272,7 @@ body {
 .modal-actions button {
   background: var(--ui-accent);
   border: 1px solid var(--ui-accent-border);
-  color: #d7e8ff;
+  color: var(--ui-accent-contrast);
   border-radius: 6px;
   padding: 6px 10px;
   cursor: pointer;
@@ -175,7 +282,7 @@ body {
 .folder {
   margin-top: 12px;
   font-weight: 600;
-  color: #b6c8e2;
+  color: var(--ui-heading);
   display: flex;
   gap: 6px;
   align-items: center;
@@ -221,7 +328,7 @@ body {
 .row-action {
   border: 1px solid transparent;
   background: transparent;
-  color: #8ea4c4;
+  color: var(--ui-icon-muted);
   width: 22px;
   height: 22px;
   border-radius: 5px;
@@ -247,14 +354,14 @@ body {
   width: 8px;
   height: 8px;
   border-radius: 999px;
-  background: #e7b5b5;
+  background: var(--ui-reachability-dot);
   margin-right: 4px;
 }
 
 .reachability-tooltip {
-  background: #261414;
-  color: #e7b5b5;
-  border: 1px solid #5f2a2a;
+  background: var(--ui-danger-bg);
+  color: var(--ui-danger-text);
+  border: 1px solid var(--ui-danger-border);
   border-radius: 4px;
   padding: 4px 6px;
   font-size: 11px;
@@ -265,7 +372,7 @@ body {
 
 .ui-tooltip {
   background: var(--ui-bg-elevated);
-  color: #c7d7ee;
+  color: var(--ui-favorite-text);
   border: 1px solid var(--ui-border-strong);
   border-radius: 6px;
   padding: 5px 8px;
@@ -289,17 +396,17 @@ body {
 }
 
 .host:hover {
-  background: #0f1724;
-  border-color: #1f3b5a;
+  background: var(--ui-host-hover-bg);
+  border-color: var(--ui-host-hover-border);
 }
 
 .host.active {
-  background: #11253c;
-  border-color: #2d5d91;
+  background: var(--ui-host-active-bg);
+  border-color: var(--ui-host-active-border);
 }
 
 .host.unassigned {
-  color: #d3dfef;
+  color: var(--ui-host-unassigned);
 }
 
 .main-panel {
@@ -331,16 +438,16 @@ body {
 }
 
 .tab.active {
-  background: #0c1523;
-  border-color: #284062;
+  background: var(--ui-tab-active-bg);
+  border-color: var(--ui-tab-active-border);
   border-width: 2px;
-  color: #d9e4f4;
+  color: var(--ui-tab-active-text);
 }
 
 .tab button {
   background: transparent;
   border: 1px solid transparent;
-  color: #9db6d9;
+  color: var(--ui-tab-icon);
   padding: 0;
   width: 22px;
   height: 22px;
@@ -357,10 +464,10 @@ body {
 .error-banner {
   margin: 10px;
   padding: 10px;
-  border: 1px solid #5f2a2a;
+  border: 1px solid var(--ui-danger-border);
   border-radius: 6px;
-  background: #261414;
-  color: #e7b5b5;
+  background: var(--ui-danger-bg);
+  color: var(--ui-danger-text);
 }
 
 .terminal-view {
@@ -371,7 +478,7 @@ body {
 .loading,
 .empty {
   padding: 20px;
-  color: #94a3c4;
+  color: var(--ui-loading-text);
 }
 
 .modal-overlay {
@@ -414,7 +521,7 @@ body {
   flex-direction: column;
   gap: 6px;
   margin-bottom: 12px;
-  color: #b5c6dd;
+  color: var(--ui-modal-details);
 }
 
 .group-list {
@@ -422,7 +529,7 @@ body {
   flex-direction: column;
   gap: 6px;
   padding: 8px;
-  background: #0d121a;
+  background: var(--ui-group-list-bg);
   border: 1px solid var(--ui-border-soft);
   border-radius: 8px;
 }
@@ -441,20 +548,20 @@ body {
 .modal-actions button:first-child {
   background: var(--ui-secondary-bg);
   border-color: var(--ui-secondary-border);
-  color: #c1d0e4;
+  color: var(--ui-secondary-button-text);
 }
 
 .modal-actions .danger-action {
   margin-right: auto;
-  background: #2a1518;
-  border-color: #6b2f36;
-  color: #efc0c6;
+  background: var(--ui-danger-action-bg);
+  border-color: var(--ui-danger-action-border);
+  color: var(--ui-danger-action-text);
 }
 
 .modal-actions button:last-child {
   background: var(--ui-accent);
   border-color: var(--ui-accent-border);
-  color: #d7e8ff;
+  color: var(--ui-accent-contrast);
 }
 
 .modal-actions button:disabled {
@@ -496,7 +603,7 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  color: #c7d7ee;
+  color: var(--ui-favorite-text);
   cursor: pointer;
   user-select: none;
 }
@@ -525,7 +632,7 @@ body {
   width: 14px;
   height: 14px;
   border-radius: 999px;
-  background: #c7d7ee;
+  background: var(--ui-toggle-knob);
   transition: transform 120ms ease;
 }
 
@@ -544,7 +651,7 @@ body {
   width: 100%;
   border: 1px solid var(--ui-border-soft);
   background: var(--ui-secondary-bg);
-  color: #c7d7ee;
+  color: var(--ui-favorite-text);
   border-radius: 6px;
   display: inline-flex;
   align-items: center;
@@ -557,7 +664,7 @@ body {
   padding: 8px;
   border: 1px solid var(--ui-border-soft);
   border-radius: 8px;
-  background: #0d121a;
+  background: var(--ui-group-list-bg);
   margin-bottom: 10px;
   display: flex;
   flex-direction: column;
@@ -584,7 +691,7 @@ body {
 }
 
 .picker.selected {
-  background: #11253c;
+  background: var(--ui-host-active-bg);
   border-radius: 6px;
 }
 
@@ -621,34 +728,34 @@ body {
 }
 
 .folder-row.clickable:hover {
-  background: #0e1622;
-  border-color: #1d3450;
+  background: var(--ui-folder-hover-bg);
+  border-color: var(--ui-folder-hover-border);
 }
 
 .folder.clickable:hover {
-  background: #0e1622;
-  border-color: #1d3450;
+  background: var(--ui-folder-hover-bg);
+  border-color: var(--ui-folder-hover-border);
 }
 
 .tab.clickable:hover {
-  background: #121b29;
-  border-color: #27507b;
+  background: var(--ui-tab-hover-bg);
+  border-color: var(--ui-tab-hover-border);
 }
 
 .tab-close.clickable:hover {
-  background: #122338;
-  border-color: #295883;
+  background: var(--ui-action-hover-bg);
+  border-color: var(--ui-action-hover-border);
 }
 
 .row-action.clickable:hover:not(:disabled) {
-  background: #122338;
-  border-color: #295883;
+  background: var(--ui-action-hover-bg);
+  border-color: var(--ui-action-hover-border);
 }
 
 .drop-target {
-  background: #18314b;
-  border-color: #3b78b6 !important;
-  box-shadow: 0 0 0 1px #3b78b6 inset;
+  background: var(--ui-drop-target-bg);
+  border-color: var(--ui-drop-target-border) !important;
+  box-shadow: 0 0 0 1px var(--ui-drop-target-border) inset;
 }
 
 .toggle-sidebar.clickable:hover,
@@ -664,8 +771,8 @@ body {
 }
 
 .modal-actions .danger-action:hover {
-  background: #351a1f;
-  border-color: #7c3941;
+  background: var(--ui-danger-action-hover-bg);
+  border-color: var(--ui-danger-action-hover-border);
 }
 
 .terminal-pane {
@@ -726,7 +833,7 @@ body {
   border: none;
   border-top: 1px solid var(--ui-border-soft);
   border-radius: 0;
-  background: #08101d;
+  background: var(--ui-space-selector-bg);
 }
 
 /* Uniform blackout theme to remove visible panel seams */
@@ -765,13 +872,13 @@ body,
 }
 
 .tab.active {
-  background: #0c1523 !important;
-  border-color: #284062 !important;
+  background: var(--ui-tab-active-bg) !important;
+  border-color: var(--ui-tab-active-border) !important;
   border-width: 2px;
-  color: #d9e4f4;
+  color: var(--ui-tab-active-text);
 }
 
 .config-row input,
 .config-row select {
-  color-scheme: dark;
+  color-scheme: var(--ui-color-scheme);
 }

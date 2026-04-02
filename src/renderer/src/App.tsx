@@ -66,7 +66,7 @@ const SPACE_SELECT_STYLES: StylesConfig<SpaceOption, false> = {
   control: (base, state) => ({
     ...base,
     minHeight: 36,
-    backgroundColor: '#0c1523',
+    backgroundColor: 'var(--ui-select-control-bg)',
     borderColor: state.isFocused ? 'var(--ui-accent-border)' : 'var(--ui-border-strong)',
     boxShadow: state.isFocused ? '0 0 0 1px color-mix(in srgb, var(--ui-accent-border) 70%, transparent)' : 'none',
     borderRadius: 5,
@@ -80,7 +80,7 @@ const SPACE_SELECT_STYLES: StylesConfig<SpaceOption, false> = {
   }),
   singleValue: (base) => ({
     ...base,
-    color: '#e5ebf5',
+    color: 'var(--ui-input-text)',
     fontSize: 13
   }),
   placeholder: (base) => ({
@@ -90,20 +90,20 @@ const SPACE_SELECT_STYLES: StylesConfig<SpaceOption, false> = {
   }),
   input: (base) => ({
     ...base,
-    color: '#e5ebf5',
+    color: 'var(--ui-input-text)',
     fontSize: 13
   }),
   indicatorSeparator: () => ({ display: 'none' }),
   dropdownIndicator: (base, state) => ({
     ...base,
-    color: state.isFocused ? '#9ec2ef' : '#8ea4c4',
+    color: state.isFocused ? 'var(--ui-icon-active)' : 'var(--ui-icon-muted)',
     '&:hover': {
-      color: '#9ec2ef'
+      color: 'var(--ui-icon-active)'
     }
   }),
   menu: (base) => ({
     ...base,
-    backgroundColor: '#0b1422',
+    backgroundColor: 'var(--ui-select-menu-bg)',
     border: '1px solid var(--ui-border-strong)',
     boxShadow: 'none',
     borderRadius: 6
@@ -118,9 +118,9 @@ const SPACE_SELECT_STYLES: StylesConfig<SpaceOption, false> = {
     backgroundColor: state.isSelected
       ? 'var(--ui-accent)'
       : state.isFocused
-        ? '#14243a'
+        ? 'var(--ui-select-option-hover-bg)'
         : 'transparent',
-    color: state.isSelected ? '#d7e8ff' : '#d7deea',
+    color: state.isSelected ? 'var(--ui-accent-contrast)' : 'var(--ui-text)',
     cursor: 'pointer'
   })
 }
