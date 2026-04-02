@@ -874,13 +874,6 @@ function App(): React.JSX.Element {
     return () => dispose()
   }, [])
 
-    const dispose = window.api.onCloseActiveTab(() => {
-      if (!activeTab) return
-      void closeTab(activeTab)
-    })
-    return () => dispose()
-  }, [activeTab])
-
   useEffect(() => {
     const dispose = window.api.onSessionHostKeyChanged((payload) => {
       setHostKeyAlert(payload)
@@ -1047,36 +1040,48 @@ function App(): React.JSX.Element {
     }
   }
 
-  const closeTab = async (tab: SessionTab): Promise<void> => {
-    if (hostKeyAlert?.sessionId === tab.sessionId) {
-      setHostKeyAlert(null)
-    }
-    if (authFallbackAlert?.sessionId === tab.sessionId) {
-      setAuthFallbackAlert(null)
-    }
+  const closeTab = useCallback(
+    async (tab: SessionTab): Promise<void> => {
+      if (hostKeyAlert?.sessionId === tab.sessionId) {
+        setHostKeyAlert(null)
+      }
+      if (authFallbackAlert?.sessionId === tab.sessionId) {
+        setAuthFallbackAlert(null)
+      }
 
-    setTabs((previous) => {
-      const remaining = previous.filter((entry) => entry.id !== tab.id)
-      setActiveTabId((current) => {
-        if (current !== tab.id) return current
-        const nextTabId =
-          getTabAccessOrder(remaining, null, tabAccessHistoryRef.current).find(
-            (tabId) => tabId !== tab.id
-          ) ?? null
-        return nextTabId
+      setTabs((previous) => {
+        const remaining = previous.filter((entry) => entry.id !== tab.id)
+        setActiveTabId((current) => {
+          if (current !== tab.id) return current
+          const nextTabId =
+            getTabAccessOrder(remaining, null, tabAccessHistoryRef.current).find(
+              (tabId) => tabId !== tab.id
+            ) ?? null
+          return nextTabId
+        })
+        return remaining
       })
-      return remaining
+
+      tabAccessHistoryRef.current = tabAccessHistoryRef.current.filter((tabId) => tabId !== tab.id)
+      tabSwitchCycleRef.current = null
+
+      try {
+        await window.api.closeSession(tab.sessionId)
+      } catch {
+        // best effort: session may already be closed
+      }
+    },
+    [authFallbackAlert?.sessionId, hostKeyAlert?.sessionId]
+  )
+
+  useEffect(() => {
+    const dispose = window.api.onCloseActiveTab(() => {
+      if (!activeTab) return
+      void closeTab(activeTab)
     })
+    return () => dispose()
+  }, [activeTab, closeTab])
 
-    tabAccessHistoryRef.current = tabAccessHistoryRef.current.filter((tabId) => tabId !== tab.id)
-    tabSwitchCycleRef.current = null
-
-    try {
-      await window.api.closeSession(tab.sessionId)
-    } catch {
-      // best effort: session may already be closed
-    }
-  }
   const openFolderMenu = (groupPath: string, anchor: { x: number; y: number }): void => {
     setFolderContextMenu({
       groupPath,
