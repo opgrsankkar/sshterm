@@ -1,6 +1,12 @@
 import { contextBridge } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
-import type { AppSettings, CreateSessionRequest, HostOptions, SessionCreated, SshConfigModel } from '../shared/types'
+import type {
+  AppSettings,
+  CreateSessionRequest,
+  HostOptions,
+  SessionCreated,
+  SshConfigModel
+} from '../shared/types'
 
 const CHANNELS = {
   getSettings: 'settings:get',
@@ -29,7 +35,13 @@ const CHANNELS = {
   sessionHostKeyChanged: 'session:hostKeyChanged',
   openSettings: 'ui:openSettings',
   openActiveDeviceSettings: 'ui:openActiveDeviceSettings',
-  toggleSidebar: 'ui:toggleSidebar'
+  toggleSidebar: 'ui:toggleSidebar',
+  refreshHosts: 'ui:refreshHosts',
+  openNewHost: 'ui:openNewHost',
+  activateNextTab: 'ui:activateNextTab',
+  activatePreviousTab: 'ui:activatePreviousTab',
+  activateNextSpace: 'ui:activateNextSpace',
+  activatePreviousSpace: 'ui:activatePreviousSpace'
 } as const
 
 // Custom APIs for renderer
@@ -37,12 +49,10 @@ const api = {
   getSettings: (): Promise<AppSettings> => electronAPI.ipcRenderer.invoke(CHANNELS.getSettings),
   setConfigPath: (configPath: string): Promise<SshConfigModel> =>
     electronAPI.ipcRenderer.invoke(CHANNELS.setConfigPath, configPath),
-  updateSettings: (
-    input: {
-      configFilePath?: string
-      scrollbackLines?: number
-    }
-  ): Promise<{
+  updateSettings: (input: {
+    configFilePath?: string
+    scrollbackLines?: number
+  }): Promise<{
     settings: AppSettings
     model: SshConfigModel
   }> => electronAPI.ipcRenderer.invoke(CHANNELS.updateSettings, input),
@@ -63,26 +73,25 @@ const api = {
     electronAPI.ipcRenderer.invoke(CHANNELS.convertSpaceToGroup, { groupPath }),
   deleteHost: (alias: string): Promise<SshConfigModel> =>
     electronAPI.ipcRenderer.invoke(CHANNELS.deleteHost, { alias }),
-  addHost: (
-    payload: {
-      name: string
-      aliases: string[]
-      groupPath: string
-      isFavorite: boolean
-      options: HostOptions
-    }
-  ): Promise<SshConfigModel> => electronAPI.ipcRenderer.invoke(CHANNELS.addHost, payload),
-  updateHostSettings: (
-    payload: {
-      currentAlias: string
-      name: string
-      aliases: string[]
-      groupPath: string
-      isFavorite: boolean
-      options: HostOptions
-    }
-  ): Promise<SshConfigModel> => electronAPI.ipcRenderer.invoke(CHANNELS.updateHostSettings, payload),
-  checkReachability: (hosts: Array<{ alias: string; target: string }>): Promise<Array<{ alias: string; reachable: boolean }>> =>
+  addHost: (payload: {
+    name: string
+    aliases: string[]
+    groupPath: string
+    isFavorite: boolean
+    options: HostOptions
+  }): Promise<SshConfigModel> => electronAPI.ipcRenderer.invoke(CHANNELS.addHost, payload),
+  updateHostSettings: (payload: {
+    currentAlias: string
+    name: string
+    aliases: string[]
+    groupPath: string
+    isFavorite: boolean
+    options: HostOptions
+  }): Promise<SshConfigModel> =>
+    electronAPI.ipcRenderer.invoke(CHANNELS.updateHostSettings, payload),
+  checkReachability: (
+    hosts: Array<{ alias: string; target: string }>
+  ): Promise<Array<{ alias: string; reachable: boolean }>> =>
     electronAPI.ipcRenderer.invoke(CHANNELS.checkReachability, { hosts }),
   clearHostGroup: (alias: string): Promise<SshConfigModel> =>
     electronAPI.ipcRenderer.invoke(CHANNELS.clearHostGroup, { alias }),
@@ -96,14 +105,18 @@ const api = {
     electronAPI.ipcRenderer.invoke(CHANNELS.resizeSession, { sessionId, cols, rows }),
   closeSession: (sessionId: string): Promise<void> =>
     electronAPI.ipcRenderer.invoke(CHANNELS.closeSession, { sessionId }),
-  onSessionData: (listener: (payload: { sessionId: string; data: string }) => void): (() => void) => {
+  onSessionData: (
+    listener: (payload: { sessionId: string; data: string }) => void
+  ): (() => void) => {
     const wrapped = (_event: unknown, payload: { sessionId: string; data: string }): void => {
       listener(payload)
     }
     electronAPI.ipcRenderer.on(CHANNELS.sessionData, wrapped)
     return () => electronAPI.ipcRenderer.removeListener(CHANNELS.sessionData, wrapped)
   },
-  onSessionExit: (listener: (payload: { sessionId: string; code: number }) => void): (() => void) => {
+  onSessionExit: (
+    listener: (payload: { sessionId: string; code: number }) => void
+  ): (() => void) => {
     const wrapped = (_event: unknown, payload: { sessionId: string; code: number }): void => {
       listener(payload)
     }
@@ -156,6 +169,48 @@ const api = {
     }
     electronAPI.ipcRenderer.on(CHANNELS.toggleSidebar, wrapped)
     return () => electronAPI.ipcRenderer.removeListener(CHANNELS.toggleSidebar, wrapped)
+  },
+  onRefreshHosts: (listener: () => void): (() => void) => {
+    const wrapped = (): void => {
+      listener()
+    }
+    electronAPI.ipcRenderer.on(CHANNELS.refreshHosts, wrapped)
+    return () => electronAPI.ipcRenderer.removeListener(CHANNELS.refreshHosts, wrapped)
+  },
+  onOpenNewHost: (listener: () => void): (() => void) => {
+    const wrapped = (): void => {
+      listener()
+    }
+    electronAPI.ipcRenderer.on(CHANNELS.openNewHost, wrapped)
+    return () => electronAPI.ipcRenderer.removeListener(CHANNELS.openNewHost, wrapped)
+  },
+  onActivateNextTab: (listener: () => void): (() => void) => {
+    const wrapped = (): void => {
+      listener()
+    }
+    electronAPI.ipcRenderer.on(CHANNELS.activateNextTab, wrapped)
+    return () => electronAPI.ipcRenderer.removeListener(CHANNELS.activateNextTab, wrapped)
+  },
+  onActivatePreviousTab: (listener: () => void): (() => void) => {
+    const wrapped = (): void => {
+      listener()
+    }
+    electronAPI.ipcRenderer.on(CHANNELS.activatePreviousTab, wrapped)
+    return () => electronAPI.ipcRenderer.removeListener(CHANNELS.activatePreviousTab, wrapped)
+  },
+  onActivateNextSpace: (listener: () => void): (() => void) => {
+    const wrapped = (): void => {
+      listener()
+    }
+    electronAPI.ipcRenderer.on(CHANNELS.activateNextSpace, wrapped)
+    return () => electronAPI.ipcRenderer.removeListener(CHANNELS.activateNextSpace, wrapped)
+  },
+  onActivatePreviousSpace: (listener: () => void): (() => void) => {
+    const wrapped = (): void => {
+      listener()
+    }
+    electronAPI.ipcRenderer.on(CHANNELS.activatePreviousSpace, wrapped)
+    return () => electronAPI.ipcRenderer.removeListener(CHANNELS.activatePreviousSpace, wrapped)
   }
 }
 
