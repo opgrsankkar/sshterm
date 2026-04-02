@@ -2,8 +2,10 @@ import os from 'node:os'
 import { randomUUID } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
-import { execFileSync } from 'node:child_process'
+import { execFile, execFileSync } from 'node:child_process'
+import { promisify } from 'node:util'
 import pty, { type IPty } from 'node-pty'
+import type { CreateSessionRequest } from '../shared/types'
 
 interface SessionRecord {
   pty: IPty
@@ -11,6 +13,8 @@ interface SessionRecord {
   configPath: string
   recentOutput: string
   hostKeyAlerted: boolean
+  authFailureAlerted: boolean
+  authMode: NonNullable<CreateSessionRequest['authMode']>
 }
 
 export interface HostKeyChangedEvent {
@@ -21,6 +25,17 @@ export interface HostKeyChangedEvent {
   offendingLine: number | null
   message: string
 }
+
+export interface AuthenticationFallbackEvent {
+  sessionId: string
+  alias: string
+  message: string
+  suggestedPreferredAuthentications: string
+  debugSummary: string | null
+}
+
+const execFileAsync = promisify(execFile)
+const PASSWORD_FALLBACK_PREFERRED_AUTHENTICATIONS = 'password,keyboard-interactive'
 
 function resolveSshBinary(): string {
   const candidates = ['/usr/bin/ssh', '/opt/homebrew/bin/ssh', '/usr/local/bin/ssh']
@@ -60,7 +75,12 @@ function ensureNodePtyHelperExecutable(): void {
   try {
     const packageJsonPath = require.resolve('node-pty/package.json')
     const nodePtyRoot = path.dirname(packageJsonPath)
-    const helperPath = path.join(nodePtyRoot, 'prebuilds', `${process.platform}-${process.arch}`, 'spawn-helper')
+    const helperPath = path.join(
+      nodePtyRoot,
+      'prebuilds',
+      `${process.platform}-${process.arch}`,
+      'spawn-helper'
+    )
 
     if (!fs.existsSync(helperPath)) {
       return
@@ -81,22 +101,24 @@ export class SessionManager {
   constructor(
     private readonly onData: (sessionId: string, data: string) => void,
     private readonly onExit: (sessionId: string, exitCode: number) => void,
-    private readonly onHostKeyChanged: (event: HostKeyChangedEvent) => void
+    private readonly onHostKeyChanged: (event: HostKeyChangedEvent) => void,
+    private readonly onAuthenticationFallbackSuggested: (event: AuthenticationFallbackEvent) => void
   ) {}
 
-  createSession(alias: string, configPath: string, cols: number, rows: number): string {
+  createSession(request: CreateSessionRequest, configPath: string): string {
     ensureNodePtyHelperExecutable()
 
     const sessionId = randomUUID()
     const shell = resolveSshBinary()
-    const args = ['-F', configPath, alias]
+    const authMode = request.authMode ?? 'default'
+    const args = buildSshArgs(request.alias, configPath, authMode)
 
     let instance: IPty
     try {
       instance = pty.spawn(shell, args, {
         name: 'xterm-256color',
-        cols,
-        rows,
+        cols: request.cols,
+        rows: request.rows,
         cwd: os.homedir(),
         env: buildPtyEnv()
       })
@@ -107,10 +129,12 @@ export class SessionManager {
 
     this.sessions.set(sessionId, {
       pty: instance,
-      alias,
+      alias: request.alias,
       configPath,
       recentOutput: '',
-      hostKeyAlerted: false
+      hostKeyAlerted: false,
+      authFailureAlerted: false,
+      authMode
     })
 
     instance.onData((data) => {
@@ -123,19 +147,31 @@ export class SessionManager {
         record.recentOutput = record.recentOutput.slice(-12000)
       }
 
-      if (record.hostKeyAlerted) return
-      const hostKey = detectHostKeyChange(record.recentOutput)
-      if (!hostKey) return
+      if (!record.hostKeyAlerted) {
+        const hostKey = detectHostKeyChange(record.recentOutput)
+        if (hostKey) {
+          record.hostKeyAlerted = true
+          this.onHostKeyChanged({
+            sessionId,
+            alias: record.alias,
+            fingerprint: hostKey.fingerprint,
+            knownHostsPath: hostKey.knownHostsPath,
+            offendingLine: hostKey.offendingLine,
+            message: hostKey.message
+          })
+        }
+      }
 
-      record.hostKeyAlerted = true
-      this.onHostKeyChanged({
-        sessionId,
-        alias: record.alias,
-        fingerprint: hostKey.fingerprint,
-        knownHostsPath: hostKey.knownHostsPath,
-        offendingLine: hostKey.offendingLine,
-        message: hostKey.message
-      })
+      if (record.authFailureAlerted || record.authMode !== 'default') {
+        return
+      }
+
+      if (!detectTooManyAuthenticationFailures(record.recentOutput)) {
+        return
+      }
+
+      record.authFailureAlerted = true
+      void this.confirmRepeatedKeyAuthAndSuggestFallback(sessionId, record.alias, record.configPath)
     })
 
     instance.onExit(({ exitCode }) => {
@@ -188,6 +224,120 @@ export class SessionManager {
       }
     }
   }
+
+  private async confirmRepeatedKeyAuthAndSuggestFallback(
+    sessionId: string,
+    alias: string,
+    configPath: string
+  ): Promise<void> {
+    const diagnosis = await diagnoseRepeatedKeyAuthentication(alias, configPath)
+    if (!diagnosis.confirmed) {
+      const record = this.sessions.get(sessionId)
+      if (record) {
+        record.authFailureAlerted = false
+      }
+      return
+    }
+
+    this.onAuthenticationFallbackSuggested({
+      sessionId,
+      alias,
+      message:
+        'SSH exhausted repeated key-based authentication attempts. Retrying with password and keyboard-interactive disables public-key auth for this reconnect attempt.',
+      suggestedPreferredAuthentications: PASSWORD_FALLBACK_PREFERRED_AUTHENTICATIONS,
+      debugSummary: diagnosis.summary
+    })
+  }
+}
+
+function buildSshArgs(
+  alias: string,
+  configPath: string,
+  authMode: NonNullable<CreateSessionRequest['authMode']>
+): string[] {
+  const args = ['-F', configPath]
+
+  if (authMode === 'passwordFallback') {
+    args.push(
+      '-o',
+      `PreferredAuthentications=${PASSWORD_FALLBACK_PREFERRED_AUTHENTICATIONS}`,
+      '-o',
+      'PubkeyAuthentication=no',
+      '-o',
+      'PasswordAuthentication=yes',
+      '-o',
+      'KbdInteractiveAuthentication=yes'
+    )
+  }
+
+  args.push(alias)
+  return args
+}
+
+function detectTooManyAuthenticationFailures(output: string): boolean {
+  return /Too many authentication failures/i.test(output)
+}
+
+async function diagnoseRepeatedKeyAuthentication(
+  alias: string,
+  configPath: string
+): Promise<{ confirmed: boolean; summary: string | null }> {
+  const sshPath = resolveSshBinary()
+  const args = [
+    '-vvv',
+    '-F',
+    configPath,
+    '-o',
+    'BatchMode=yes',
+    '-o',
+    'ConnectTimeout=5',
+    '-o',
+    'NumberOfPasswordPrompts=0',
+    '-o',
+    'PreferredAuthentications=publickey',
+    '-o',
+    'PasswordAuthentication=no',
+    '-o',
+    'KbdInteractiveAuthentication=no',
+    alias
+  ]
+
+  let combinedOutput = ''
+  try {
+    const result = await execFileAsync(sshPath, args, {
+      encoding: 'utf8',
+      env: buildPtyEnv(),
+      timeout: 8000,
+      maxBuffer: 256 * 1024
+    })
+    combinedOutput = `${result.stdout ?? ''}\n${result.stderr ?? ''}`
+  } catch (error) {
+    const stdout =
+      typeof error === 'object' && error && 'stdout' in error ? String(error.stdout ?? '') : ''
+    const stderr =
+      typeof error === 'object' && error && 'stderr' in error ? String(error.stderr ?? '') : ''
+    combinedOutput = `${stdout}\n${stderr}`
+  }
+
+  const normalizedOutput = combinedOutput.trim()
+  if (!normalizedOutput) {
+    return { confirmed: false, summary: null }
+  }
+
+  const publicKeyOfferCount =
+    normalizedOutput.match(/Offering public key:|Will attempt key:|Trying private key:/g)?.length ??
+    0
+  const confirmed =
+    /Too many authentication failures/i.test(normalizedOutput) && publicKeyOfferCount > 0
+
+  if (!confirmed) {
+    return { confirmed: false, summary: null }
+  }
+
+  return {
+    confirmed: true,
+    summary: `ssh -vvv saw ${publicKeyOfferCount} key-based authentication attempt${publicKeyOfferCount === 1 ? '' : 's'} before disconnecting with "Too many authentication failures".`
+  }
 }
 
 function detectHostKeyChange(output: string): {
@@ -212,7 +362,11 @@ function detectHostKeyChange(output: string): {
 }
 
 function resolveSshKeygenBinary(): string {
-  const candidates = ['/usr/bin/ssh-keygen', '/opt/homebrew/bin/ssh-keygen', '/usr/local/bin/ssh-keygen']
+  const candidates = [
+    '/usr/bin/ssh-keygen',
+    '/opt/homebrew/bin/ssh-keygen',
+    '/usr/local/bin/ssh-keygen'
+  ]
   for (const candidate of candidates) {
     try {
       fs.accessSync(candidate, fs.constants.X_OK)
@@ -224,7 +378,10 @@ function resolveSshKeygenBinary(): string {
   return '/usr/bin/ssh-keygen'
 }
 
-function resolveAliasTarget(alias: string, configPath: string): { hostname: string | null; port: string | null } {
+function resolveAliasTarget(
+  alias: string,
+  configPath: string
+): { hostname: string | null; port: string | null } {
   const sshPath = resolveSshBinary()
   try {
     const rendered = execFileSync(sshPath, ['-G', '-F', configPath, alias], {
