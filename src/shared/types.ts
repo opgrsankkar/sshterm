@@ -29,7 +29,12 @@ export interface HostEntry {
   effectiveSpaceName: string
   sourceGroupPath: string | null
   effectiveGroupPath: string | null
-  assignmentReason: 'valid-comment' | 'invalid-comment' | 'no-comment' | 'override' | 'space-derived'
+  assignmentReason:
+    | 'valid-comment'
+    | 'invalid-comment'
+    | 'no-comment'
+    | 'override'
+    | 'space-derived'
 }
 
 export interface GroupNode {
@@ -64,6 +69,7 @@ export interface CreateSessionRequest {
   alias: string
   cols: number
   rows: number
+  authMode?: 'default' | 'passwordFallback'
 }
 
 export interface SessionCreated {
