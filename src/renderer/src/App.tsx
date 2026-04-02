@@ -18,12 +18,14 @@ import {
   X
 } from 'lucide-react'
 import type { GroupNode, HostEntry, HostOptions, SshConfigModel } from '../../shared/types'
+import HostSearchPopup from './components/HostSearchPopup'
 import TerminalView from './components/TerminalView'
 
 interface SessionTab {
   id: string
   label: string
   sessionId: string
+  lastActivatedAt: number
 }
 
 interface GroupPickNode {
@@ -591,6 +593,13 @@ function findHostByAlias(model: SshConfigModel, alias: string): HostEntry | null
   return collectAllHosts(model).find((host) => host.alias === alias) ?? null
 }
 
+function getMostRecentTab(tabs: SessionTab[]): SessionTab | null {
+  return tabs.reduce<SessionTab | null>((mostRecent, tab) => {
+    if (!mostRecent || tab.lastActivatedAt > mostRecent.lastActivatedAt) return tab
+    return mostRecent
+  }, null)
+}
+
 function findGroupByPath(node: GroupNode, groupPath: string): GroupNode | null {
   if (node.path === groupPath) return node
   for (const child of node.children) {
@@ -652,6 +661,7 @@ function App(): React.JSX.Element {
   const [moveTargetSpaceName, setMoveTargetSpaceName] = useState('')
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [isHostSearchOpen, setIsHostSearchOpen] = useState(false)
   const [settingsConfigPath, setSettingsConfigPath] = useState('')
   const [settingsScrollbackLines, setSettingsScrollbackLines] = useState(5000)
   const [settingsError, setSettingsError] = useState<string | null>(null)
@@ -682,6 +692,7 @@ function App(): React.JSX.Element {
     () => (model ? filterHostsBySpace(collectFavoriteHosts(model), activeSpaceName) : []),
     [model, activeSpaceName]
   )
+  const allHosts = useMemo(() => (model ? collectAllHosts(model) : []), [model])
 
   const activeSpaceRoot = useMemo(() => {
     if (!model || activeSpaceName === 'Default') return null
@@ -708,6 +719,12 @@ function App(): React.JSX.Element {
     (tabId: string | null, options?: { preserveCycle?: boolean }): void => {
       if (!options?.preserveCycle) {
         tabSwitchCycleRef.current = null
+      }
+      if (tabId !== null) {
+        const lastActivatedAt = Date.now()
+        setTabs((previous) =>
+          previous.map((tab) => (tab.id === tabId ? { ...tab, lastActivatedAt } : tab))
+        )
       }
       setActiveTabId(tabId)
     },
@@ -845,6 +862,13 @@ function App(): React.JSX.Element {
   }, [cycleSpaces])
 
   useEffect(() => {
+    const dispose = window.api.onOpenHostSearch(() => {
+      setIsHostSearchOpen(true)
+    })
+    return () => dispose()
+  }, [])
+
+  useEffect(() => {
     const dispose = window.api.onSessionHostKeyChanged((payload) => {
       setHostKeyAlert(payload)
     })
@@ -861,6 +885,11 @@ function App(): React.JSX.Element {
 
       if (hostKeyAlert) {
         setHostKeyAlert(null)
+        return
+      }
+
+      if (isHostSearchOpen) {
+        setIsHostSearchOpen(false)
         return
       }
 
@@ -895,6 +924,7 @@ function App(): React.JSX.Element {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [
     hostKeyAlert,
+    isHostSearchOpen,
     assigningHost,
     hostSettingsDraft,
     editingFolderPath,
@@ -971,17 +1001,24 @@ function App(): React.JSX.Element {
     }
   }, [])
 
-  const connectHost = async (alias: string): Promise<void> => {
+  const findMostRecentTabForHost = (alias: string): SessionTab | null => {
+    return getMostRecentTab(tabs.filter((tab) => tab.label === alias))
+  }
+
+  const connectHost = async (alias: string): Promise<boolean> => {
     try {
       setConnectionError(null)
 
+      const lastActivatedAt = Date.now()
       const { sessionId } = await window.api.createSession({ alias, cols: 120, rows: 32 })
-      const tab: SessionTab = { id: crypto.randomUUID(), label: alias, sessionId }
+      const tab: SessionTab = { id: crypto.randomUUID(), label: alias, sessionId, lastActivatedAt }
       setTabs((previous) => [...previous, tab])
       activateTab(tab.id)
+      return true
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       setConnectionError(`Failed to open session for ${alias}: ${message}`)
+      return false
     }
   }
 
@@ -1322,6 +1359,27 @@ function App(): React.JSX.Element {
   const handleDragFinish = (): void => {
     setIsDragging(false)
     setDropTargetPath(null)
+  }
+
+  const closeHostSearch = (): void => {
+    setIsHostSearchOpen(false)
+  }
+
+  const openNewHostTabFromSearch = async (alias: string): Promise<void> => {
+    const didConnect = await connectHost(alias)
+    if (didConnect) closeHostSearch()
+  }
+
+  const switchToRecentHostTabFromSearch = async (alias: string): Promise<void> => {
+    const existingTab = findMostRecentTabForHost(alias)
+    if (existingTab) {
+      activateTab(existingTab.id)
+      closeHostSearch()
+      return
+    }
+
+    const didConnect = await connectHost(alias)
+    if (didConnect) closeHostSearch()
   }
 
   const acceptHostKeyAndReconnect = async (): Promise<void> => {
@@ -2051,6 +2109,16 @@ function App(): React.JSX.Element {
             </div>
           </div>
         </div>
+      ) : null}
+
+      {isHostSearchOpen ? (
+        <HostSearchPopup
+          hosts={allHosts}
+          openTabs={tabs}
+          onClose={closeHostSearch}
+          onOpenNew={(alias) => openNewHostTabFromSearch(alias)}
+          onSwitchRecent={(alias) => switchToRecentHostTabFromSearch(alias)}
+        />
       ) : null}
     </div>
   )

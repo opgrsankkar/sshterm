@@ -41,7 +41,8 @@ const CHANNELS = {
   activateNextTab: 'ui:activateNextTab',
   activatePreviousTab: 'ui:activatePreviousTab',
   activateNextSpace: 'ui:activateNextSpace',
-  activatePreviousSpace: 'ui:activatePreviousSpace'
+  activatePreviousSpace: 'ui:activatePreviousSpace',
+  openHostSearch: 'ui:openHostSearch'
 } as const
 
 // Custom APIs for renderer
@@ -211,6 +212,13 @@ const api = {
     }
     electronAPI.ipcRenderer.on(CHANNELS.activatePreviousSpace, wrapped)
     return () => electronAPI.ipcRenderer.removeListener(CHANNELS.activatePreviousSpace, wrapped)
+  },
+  onOpenHostSearch: (listener: () => void): (() => void) => {
+    const wrapped = (): void => {
+      listener()
+    }
+    electronAPI.ipcRenderer.on(CHANNELS.openHostSearch, wrapped)
+    return () => electronAPI.ipcRenderer.removeListener(CHANNELS.openHostSearch, wrapped)
   }
 }
 

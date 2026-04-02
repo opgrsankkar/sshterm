@@ -15,7 +15,8 @@ const UI_CHANNELS = {
   activateNextTab: 'ui:activateNextTab',
   activatePreviousTab: 'ui:activatePreviousTab',
   activateNextSpace: 'ui:activateNextSpace',
-  activatePreviousSpace: 'ui:activatePreviousSpace'
+  activatePreviousSpace: 'ui:activatePreviousSpace',
+  openHostSearch: 'ui:openHostSearch'
 } as const
 
 function openSettingsFromMenu(): void {
@@ -146,6 +147,12 @@ function createWindow(): void {
     if (input.key.toLowerCase() === 's') {
       event.preventDefault()
       mainWindow.webContents.send(UI_CHANNELS.toggleSidebar)
+      return
+    }
+
+    if (input.key.toLowerCase() === 't') {
+      event.preventDefault()
+      mainWindow.webContents.send(UI_CHANNELS.openHostSearch)
     }
   })
 

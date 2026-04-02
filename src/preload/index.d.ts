@@ -68,6 +68,7 @@ interface SshtermApi {
   onActivatePreviousTab: (listener: () => void) => () => void
   onActivateNextSpace: (listener: () => void) => () => void
   onActivatePreviousSpace: (listener: () => void) => () => void
+  onOpenHostSearch: (listener: () => void) => () => void
 }
 
 declare global {
