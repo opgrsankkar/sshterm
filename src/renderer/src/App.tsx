@@ -48,6 +48,14 @@ interface HostKeyAlert {
   message: string
 }
 
+interface AuthenticationFallbackAlert {
+  sessionId: string
+  alias: string
+  message: string
+  suggestedPreferredAuthentications: string
+  debugSummary: string | null
+}
+
 type ReachabilityState = Record<string, boolean | undefined>
 
 interface HostSettingsDraft {
@@ -666,6 +674,9 @@ function App(): React.JSX.Element {
   const [settingsScrollbackLines, setSettingsScrollbackLines] = useState(5000)
   const [settingsError, setSettingsError] = useState<string | null>(null)
   const [hostKeyAlert, setHostKeyAlert] = useState<HostKeyAlert | null>(null)
+  const [authFallbackAlert, setAuthFallbackAlert] = useState<AuthenticationFallbackAlert | null>(
+    null
+  )
 
   const [expandedPickerFolders, setExpandedPickerFolders] = useState<Set<string>>(
     new Set(['Global'])
@@ -871,6 +882,13 @@ function App(): React.JSX.Element {
   }, [])
 
   useEffect(() => {
+    const dispose = window.api.onSessionAuthenticationFallback((payload) => {
+      setAuthFallbackAlert(payload)
+    })
+    return () => dispose()
+  }, [])
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key === 'Control' || event.key === 'Meta') {
         tabSwitchCycleRef.current = null
@@ -885,6 +903,11 @@ function App(): React.JSX.Element {
 
       if (isHostSearchOpen) {
         setIsHostSearchOpen(false)
+        return
+      }
+
+      if (authFallbackAlert) {
+        setAuthFallbackAlert(null)
         return
       }
 
@@ -920,6 +943,7 @@ function App(): React.JSX.Element {
   }, [
     hostKeyAlert,
     isHostSearchOpen,
+    authFallbackAlert,
     assigningHost,
     hostSettingsDraft,
     editingFolderPath,
@@ -927,7 +951,6 @@ function App(): React.JSX.Element {
     folderContextMenu,
     isSettingsOpen
   ])
-
   useEffect(() => {
     const onKeyUp = (event: KeyboardEvent): void => {
       if (event.key === 'Control' || event.key === 'Meta') {
@@ -1018,6 +1041,13 @@ function App(): React.JSX.Element {
   }
 
   const closeTab = async (tab: SessionTab): Promise<void> => {
+    if (hostKeyAlert?.sessionId === tab.sessionId) {
+      setHostKeyAlert(null)
+    }
+    if (authFallbackAlert?.sessionId === tab.sessionId) {
+      setAuthFallbackAlert(null)
+    }
+
     setTabs((previous) => {
       const remaining = previous.filter((entry) => entry.id !== tab.id)
       setActiveTabId((current) => {
@@ -1414,6 +1444,48 @@ function App(): React.JSX.Element {
       )
       activateTab(existingTab.id)
       setHostKeyAlert(null)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setConnectionError(message)
+    }
+  }
+
+  const retryAuthenticationWithPasswordFallback = async (): Promise<void> => {
+    if (!authFallbackAlert) return
+
+    try {
+      setConnectionError(null)
+      const existingTab = tabs.find((tab) => tab.sessionId === authFallbackAlert.sessionId)
+      if (!existingTab) {
+        setAuthFallbackAlert(null)
+        return
+      }
+
+      try {
+        await window.api.closeSession(existingTab.sessionId)
+      } catch {
+        // ignore; session may already be closed
+      }
+
+      const { sessionId: nextSessionId } = await window.api.createSession({
+        alias: existingTab.label,
+        cols: 120,
+        rows: 32,
+        authMode: 'passwordFallback'
+      })
+
+      setTabs((previous) =>
+        previous.map((tab) =>
+          tab.id === existingTab.id
+            ? {
+                ...tab,
+                sessionId: nextSessionId
+              }
+            : tab
+        )
+      )
+      setActiveTabId(existingTab.id)
+      setAuthFallbackAlert(null)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       setConnectionError(message)
@@ -2114,6 +2186,27 @@ function App(): React.JSX.Element {
           onOpenNew={(alias) => openNewHostTabFromSearch(alias)}
           onSwitchRecent={(alias) => switchToRecentHostTabFromSearch(alias)}
         />
+      ) : null}
+
+      {authFallbackAlert ? (
+        <div className="modal-overlay" onClick={() => setAuthFallbackAlert(null)}>
+          <div className="modal" onClick={(event) => event.stopPropagation()}>
+            <h3>Authentication fallback suggested for {authFallbackAlert.alias}</h3>
+            <div className="modal-details">
+              <div>{authFallbackAlert.message}</div>
+              <div>
+                Retry preference: <code>{authFallbackAlert.suggestedPreferredAuthentications}</code>
+              </div>
+              {authFallbackAlert.debugSummary ? <div>{authFallbackAlert.debugSummary}</div> : null}
+            </div>
+            <div className="modal-actions">
+              <button onClick={() => setAuthFallbackAlert(null)}>Cancel</button>
+              <button onClick={() => void retryAuthenticationWithPasswordFallback()}>
+                Retry with Password
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   )

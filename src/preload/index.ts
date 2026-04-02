@@ -33,6 +33,7 @@ const CHANNELS = {
   sessionData: 'session:data',
   sessionExit: 'session:exit',
   sessionHostKeyChanged: 'session:hostKeyChanged',
+  sessionAuthenticationFallback: 'session:authenticationFallback',
   openSettings: 'ui:openSettings',
   openActiveDeviceSettings: 'ui:openActiveDeviceSettings',
   toggleSidebar: 'ui:toggleSidebar',
@@ -149,6 +150,31 @@ const api = {
     }
     electronAPI.ipcRenderer.on(CHANNELS.sessionHostKeyChanged, wrapped)
     return () => electronAPI.ipcRenderer.removeListener(CHANNELS.sessionHostKeyChanged, wrapped)
+  },
+  onSessionAuthenticationFallback: (
+    listener: (payload: {
+      sessionId: string
+      alias: string
+      message: string
+      suggestedPreferredAuthentications: string
+      debugSummary: string | null
+    }) => void
+  ): (() => void) => {
+    const wrapped = (
+      _event: unknown,
+      payload: {
+        sessionId: string
+        alias: string
+        message: string
+        suggestedPreferredAuthentications: string
+        debugSummary: string | null
+      }
+    ): void => {
+      listener(payload)
+    }
+    electronAPI.ipcRenderer.on(CHANNELS.sessionAuthenticationFallback, wrapped)
+    return () =>
+      electronAPI.ipcRenderer.removeListener(CHANNELS.sessionAuthenticationFallback, wrapped)
   },
   onOpenSettings: (listener: () => void): (() => void) => {
     const wrapped = (): void => {

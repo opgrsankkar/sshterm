@@ -41,7 +41,8 @@ const CHANNELS = {
   closeSession: 'session:close',
   sessionData: 'session:data',
   sessionExit: 'session:exit',
-  sessionHostKeyChanged: 'session:hostKeyChanged'
+  sessionHostKeyChanged: 'session:hostKeyChanged',
+  sessionAuthenticationFallback: 'session:authenticationFallback'
 } as const
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
@@ -54,6 +55,9 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     },
     (event) => {
       mainWindow.webContents.send(CHANNELS.sessionHostKeyChanged, event)
+    },
+    (event) => {
+      mainWindow.webContents.send(CHANNELS.sessionAuthenticationFallback, event)
     }
   )
 
@@ -87,17 +91,23 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     }
   )
 
-  ipcMain.handle(CHANNELS.assignHostGroup, async (_event, payload: { alias: string; groupPath: string }) => {
-    const settings = getSettings()
-    await assignHostGroupInConfig(settings.configFilePath, payload.alias, payload.groupPath)
-    return parseSshConfig(settings.configFilePath)
-  })
+  ipcMain.handle(
+    CHANNELS.assignHostGroup,
+    async (_event, payload: { alias: string; groupPath: string }) => {
+      const settings = getSettings()
+      await assignHostGroupInConfig(settings.configFilePath, payload.alias, payload.groupPath)
+      return parseSshConfig(settings.configFilePath)
+    }
+  )
 
-  ipcMain.handle(CHANNELS.setHostFavorite, async (_event, payload: { alias: string; isFavorite: boolean }) => {
-    const settings = getSettings()
-    await setHostFavoriteInConfig(settings.configFilePath, payload.alias, payload.isFavorite)
-    return parseSshConfig(settings.configFilePath)
-  })
+  ipcMain.handle(
+    CHANNELS.setHostFavorite,
+    async (_event, payload: { alias: string; isFavorite: boolean }) => {
+      const settings = getSettings()
+      await setHostFavoriteInConfig(settings.configFilePath, payload.alias, payload.isFavorite)
+      return parseSshConfig(settings.configFilePath)
+    }
+  )
 
   ipcMain.handle(
     CHANNELS.updateHostSettings,
@@ -141,16 +151,23 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     CHANNELS.moveGroup,
     async (_event, payload: { sourceGroupPath: string; targetParentGroupPath: string }) => {
       const settings = getSettings()
-      await moveGroupInConfig(settings.configFilePath, payload.sourceGroupPath, payload.targetParentGroupPath)
+      await moveGroupInConfig(
+        settings.configFilePath,
+        payload.sourceGroupPath,
+        payload.targetParentGroupPath
+      )
       return parseSshConfig(settings.configFilePath)
     }
   )
 
-  ipcMain.handle(CHANNELS.createGroup, async (_event, payload: { parentPath: string; folderName: string }) => {
-    const settings = getSettings()
-    await createGroupInConfig(settings.configFilePath, payload.parentPath, payload.folderName)
-    return parseSshConfig(settings.configFilePath)
-  })
+  ipcMain.handle(
+    CHANNELS.createGroup,
+    async (_event, payload: { parentPath: string; folderName: string }) => {
+      const settings = getSettings()
+      await createGroupInConfig(settings.configFilePath, payload.parentPath, payload.folderName)
+      return parseSshConfig(settings.configFilePath)
+    }
+  )
 
   ipcMain.handle(CHANNELS.deleteGroup, async (_event, payload: { groupPath: string }) => {
     const settings = getSettings()
@@ -162,7 +179,11 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     CHANNELS.convertGroupToSpace,
     async (_event, payload: { groupPath: string; spaceName: string }) => {
       const settings = getSettings()
-      await convertGroupToSpaceInConfig(settings.configFilePath, payload.groupPath, payload.spaceName)
+      await convertGroupToSpaceInConfig(
+        settings.configFilePath,
+        payload.groupPath,
+        payload.spaceName
+      )
       return parseSshConfig(settings.configFilePath)
     }
   )
@@ -218,18 +239,16 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
   ipcMain.handle(CHANNELS.createSession, (_event, request: CreateSessionRequest) => {
     const settings = getSettings()
-    const sessionId = sessionManager.createSession(
-      request.alias,
-      settings.configFilePath,
-      request.cols,
-      request.rows
-    )
+    const sessionId = sessionManager.createSession(request, settings.configFilePath)
     return { sessionId }
   })
 
-  ipcMain.handle(CHANNELS.writeSessionInput, (_event, payload: { sessionId: string; data: string }) => {
-    sessionManager.writeInput(payload.sessionId, payload.data)
-  })
+  ipcMain.handle(
+    CHANNELS.writeSessionInput,
+    (_event, payload: { sessionId: string; data: string }) => {
+      sessionManager.writeInput(payload.sessionId, payload.data)
+    }
+  )
 
   ipcMain.handle(
     CHANNELS.resizeSession,
@@ -247,11 +266,14 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     sessionManager.acceptHostKeyChange(payload.alias, settings.configFilePath)
   })
 
-  ipcMain.handle(CHANNELS.assignHostGroup + ':clear', async (_event, payload: { alias: string }) => {
-    const settings = getSettings()
-    await clearHostGroupInConfig(settings.configFilePath, payload.alias)
-    return parseSshConfig(settings.configFilePath)
-  })
+  ipcMain.handle(
+    CHANNELS.assignHostGroup + ':clear',
+    async (_event, payload: { alias: string }) => {
+      const settings = getSettings()
+      await clearHostGroupInConfig(settings.configFilePath, payload.alias)
+      return parseSshConfig(settings.configFilePath)
+    }
+  )
 }
 
 export { CHANNELS }

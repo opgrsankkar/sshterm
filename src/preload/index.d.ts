@@ -59,6 +59,15 @@ interface SshtermApi {
       message: string
     }) => void
   ) => () => void
+  onSessionAuthenticationFallback: (
+    listener: (payload: {
+      sessionId: string
+      alias: string
+      message: string
+      suggestedPreferredAuthentications: string
+      debugSummary: string | null
+    }) => void
+  ) => () => void
   onOpenSettings: (listener: () => void) => () => void
   onOpenActiveDeviceSettings: (listener: () => void) => () => void
   onToggleSidebar: (listener: () => void) => () => void
