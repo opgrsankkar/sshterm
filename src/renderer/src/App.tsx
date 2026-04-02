@@ -18,12 +18,14 @@ import {
   X
 } from 'lucide-react'
 import type { GroupNode, HostEntry, HostOptions, SshConfigModel } from '../../shared/types'
+import HostSearchPopup from './components/HostSearchPopup'
 import TerminalView from './components/TerminalView'
 
 interface SessionTab {
   id: string
   label: string
   sessionId: string
+  lastActivatedAt: number
 }
 
 interface GroupPickNode {
@@ -68,7 +70,9 @@ const SPACE_SELECT_STYLES: StylesConfig<SpaceOption, false> = {
     minHeight: 36,
     backgroundColor: 'var(--ui-select-control-bg)',
     borderColor: state.isFocused ? 'var(--ui-accent-border)' : 'var(--ui-border-strong)',
-    boxShadow: state.isFocused ? '0 0 0 1px color-mix(in srgb, var(--ui-accent-border) 70%, transparent)' : 'none',
+    boxShadow: state.isFocused
+      ? '0 0 0 1px color-mix(in srgb, var(--ui-accent-border) 70%, transparent)'
+      : 'none',
     borderRadius: 5,
     '&:hover': {
       borderColor: 'var(--ui-accent-border)'
@@ -242,7 +246,9 @@ function setDragPayload(event: React.DragEvent, payload: DragPayload): void {
 }
 
 function getDragPayload(event: React.DragEvent): DragPayload | null {
-  const raw = event.dataTransfer.getData('application/x-sshterm-drag') || event.dataTransfer.getData('text/plain')
+  const raw =
+    event.dataTransfer.getData('application/x-sshterm-drag') ||
+    event.dataTransfer.getData('text/plain')
   if (!raw) return null
 
   try {
@@ -354,7 +360,11 @@ function GroupPickTree({
     <ul className="group-tree picker-tree">
       <li>
         <div
-          className={selectedPath === node.path ? 'folder picker selected clickable' : 'folder picker clickable'}
+          className={
+            selectedPath === node.path
+              ? 'folder picker selected clickable'
+              : 'folder picker clickable'
+          }
           style={{ paddingLeft: `${depth * 14}px` }}
         >
           <button className="icon-btn" onClick={() => toggle(node.path)}>
@@ -433,7 +443,11 @@ function GroupTree({
         return (
           <li key={child.path}>
             <div
-              className={dropTargetPath === child.path ? 'row folder-row clickable drop-target' : 'row folder-row clickable'}
+              className={
+                dropTargetPath === child.path
+                  ? 'row folder-row clickable drop-target'
+                  : 'row folder-row clickable'
+              }
               onClick={() => onToggleFolder(child.path)}
               draggable
               onDragStart={(event) => {
@@ -579,6 +593,13 @@ function findHostByAlias(model: SshConfigModel, alias: string): HostEntry | null
   return collectAllHosts(model).find((host) => host.alias === alias) ?? null
 }
 
+function getMostRecentTab(tabs: SessionTab[]): SessionTab | null {
+  return tabs.reduce<SessionTab | null>((mostRecent, tab) => {
+    if (!mostRecent || tab.lastActivatedAt > mostRecent.lastActivatedAt) return tab
+    return mostRecent
+  }, null)
+}
+
 function findGroupByPath(node: GroupNode, groupPath: string): GroupNode | null {
   if (node.path === groupPath) return node
   for (const child of node.children) {
@@ -620,12 +641,15 @@ function App(): React.JSX.Element {
   const [moveTargetSpaceName, setMoveTargetSpaceName] = useState('')
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [isHostSearchOpen, setIsHostSearchOpen] = useState(false)
   const [settingsConfigPath, setSettingsConfigPath] = useState('')
   const [settingsScrollbackLines, setSettingsScrollbackLines] = useState(5000)
   const [settingsError, setSettingsError] = useState<string | null>(null)
   const [hostKeyAlert, setHostKeyAlert] = useState<HostKeyAlert | null>(null)
 
-  const [expandedPickerFolders, setExpandedPickerFolders] = useState<Set<string>>(new Set(['Global']))
+  const [expandedPickerFolders, setExpandedPickerFolders] = useState<Set<string>>(
+    new Set(['Global'])
+  )
   const [dropTargetPath, setDropTargetPath] = useState<string | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [hostReachability, setHostReachability] = useState<ReachabilityState>({})
@@ -642,6 +666,7 @@ function App(): React.JSX.Element {
     () => (model ? filterHostsBySpace(collectFavoriteHosts(model), activeSpaceName) : []),
     [model, activeSpaceName]
   )
+  const allHosts = useMemo(() => (model ? collectAllHosts(model) : []), [model])
 
   const activeSpaceRoot = useMemo(() => {
     if (!model || activeSpaceName === 'Default') return null
@@ -711,6 +736,13 @@ function App(): React.JSX.Element {
   }, [])
 
   useEffect(() => {
+    const dispose = window.api.onOpenHostSearch(() => {
+      setIsHostSearchOpen(true)
+    })
+    return () => dispose()
+  }, [])
+
+  useEffect(() => {
     const dispose = window.api.onSessionHostKeyChanged((payload) => {
       setHostKeyAlert(payload)
     })
@@ -723,6 +755,11 @@ function App(): React.JSX.Element {
 
       if (hostKeyAlert) {
         setHostKeyAlert(null)
+        return
+      }
+
+      if (isHostSearchOpen) {
+        setIsHostSearchOpen(false)
         return
       }
 
@@ -755,7 +792,16 @@ function App(): React.JSX.Element {
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [hostKeyAlert, assigningHost, hostSettingsDraft, editingFolderPath, movingFolderPath, folderContextMenu, isSettingsOpen])
+  }, [
+    hostKeyAlert,
+    isHostSearchOpen,
+    assigningHost,
+    hostSettingsDraft,
+    editingFolderPath,
+    movingFolderPath,
+    folderContextMenu,
+    isSettingsOpen
+  ])
 
   useEffect(() => {
     const boot = async (): Promise<void> => {
@@ -814,17 +860,32 @@ function App(): React.JSX.Element {
     }
   }
 
-  const connectHost = async (alias: string): Promise<void> => {
+  const activateTab = (tabId: string): void => {
+    const lastActivatedAt = Date.now()
+    setTabs((previous) =>
+      previous.map((tab) => (tab.id === tabId ? { ...tab, lastActivatedAt } : tab))
+    )
+    setActiveTabId(tabId)
+  }
+
+  const findMostRecentTabForHost = (alias: string): SessionTab | null => {
+    return getMostRecentTab(tabs.filter((tab) => tab.label === alias))
+  }
+
+  const connectHost = async (alias: string): Promise<boolean> => {
     try {
       setConnectionError(null)
 
+      const lastActivatedAt = Date.now()
       const { sessionId } = await window.api.createSession({ alias, cols: 120, rows: 32 })
-      const tab: SessionTab = { id: crypto.randomUUID(), label: alias, sessionId }
+      const tab: SessionTab = { id: crypto.randomUUID(), label: alias, sessionId, lastActivatedAt }
       setTabs((previous) => [...previous, tab])
       setActiveTabId(tab.id)
+      return true
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       setConnectionError(`Failed to open session for ${alias}: ${message}`)
+      return false
     }
   }
 
@@ -833,7 +894,7 @@ function App(): React.JSX.Element {
       const remaining = previous.filter((entry) => entry.id !== tab.id)
       setActiveTabId((current) => {
         if (current !== tab.id) return current
-        return remaining.length ? remaining[remaining.length - 1].id : null
+        return getMostRecentTab(remaining)?.id ?? null
       })
       return remaining
     })
@@ -1011,7 +1072,7 @@ function App(): React.JSX.Element {
     if (!hostSettingsDraft?.currentAlias) return
 
     const confirmed = window.confirm(
-      `Warning: this will permanently remove \"${hostSettingsDraft.currentAlias}\" from your SSH config. Continue?`
+      `Warning: this will permanently remove "${hostSettingsDraft.currentAlias}" from your SSH config. Continue?`
     )
     if (!confirmed) return
 
@@ -1146,6 +1207,27 @@ function App(): React.JSX.Element {
     setDropTargetPath(null)
   }
 
+  const closeHostSearch = (): void => {
+    setIsHostSearchOpen(false)
+  }
+
+  const openNewHostTabFromSearch = async (alias: string): Promise<void> => {
+    const didConnect = await connectHost(alias)
+    if (didConnect) closeHostSearch()
+  }
+
+  const switchToRecentHostTabFromSearch = async (alias: string): Promise<void> => {
+    const existingTab = findMostRecentTabForHost(alias)
+    if (existingTab) {
+      activateTab(existingTab.id)
+      closeHostSearch()
+      return
+    }
+
+    const didConnect = await connectHost(alias)
+    if (didConnect) closeHostSearch()
+  }
+
   const acceptHostKeyAndReconnect = async (): Promise<void> => {
     if (!hostKeyAlert) return
 
@@ -1181,7 +1263,7 @@ function App(): React.JSX.Element {
             : tab
         )
       )
-      setActiveTabId(existingTab.id)
+      activateTab(existingTab.id)
       setHostKeyAlert(null)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -1190,7 +1272,9 @@ function App(): React.JSX.Element {
   }
 
   const contextMenuFolderNode =
-    model && folderContextMenu ? findGroupByPath(model.globalRoot, folderContextMenu.groupPath) : null
+    model && folderContextMenu
+      ? findGroupByPath(model.globalRoot, folderContextMenu.groupPath)
+      : null
 
   const destinationSpaceOptions =
     model && movingFolderPath
@@ -1240,10 +1324,17 @@ function App(): React.JSX.Element {
               >
                 <RotateCw size={14} />
               </button>
-              <button className="toggle-sidebar clickable" onClick={openCreateDeviceModal} title="Add new Device">
+              <button
+                className="toggle-sidebar clickable"
+                onClick={openCreateDeviceModal}
+                title="Add new Device"
+              >
                 <Plus size={14} />
               </button>
-              <HeaderActionButton tooltip="Open App Settings (⌘,)" onClick={() => setIsSettingsOpen(true)}>
+              <HeaderActionButton
+                tooltip="Open App Settings (⌘,)"
+                onClick={() => setIsSettingsOpen(true)}
+              >
                 <Settings size={14} />
               </HeaderActionButton>
             </div>
@@ -1253,7 +1344,10 @@ function App(): React.JSX.Element {
         {isSidebarCollapsed ? null : (
           <>
             <div className="sidebar-content">
-              <div className="row folder-row folder-root clickable" onClick={() => setIsFavoritesExpanded((current) => !current)}>
+              <div
+                className="row folder-row folder-root clickable"
+                onClick={() => setIsFavoritesExpanded((current) => !current)}
+              >
                 <div className="row-main">
                   {isFavoritesExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                   {isFavoritesExpanded ? <FolderOpen size={14} /> : <Folder size={14} />}
@@ -1261,185 +1355,210 @@ function App(): React.JSX.Element {
                 </div>
               </div>
 
-            {isFavoritesExpanded ? (
-              <ul className="group-tree">
-                {favoriteHosts.map((host) => (
-                  <li key={`favorite:${host.alias}`}>
-                    <div
-                      className={
-                        host.alias === activeHostAlias
-                          ? 'row host-row host active clickable'
-                          : 'row host-row host clickable'
-                      }
-                      draggable
-                      onDragStart={(event) => {
-                        handleDragBegin()
-                        setDragPayload(event, { type: 'host', value: host.alias })
-                      }}
-                      onDragEnd={handleDragFinish}
-                      onDoubleClick={() => void connectHost(host.alias)}
-                    >
+              {isFavoritesExpanded ? (
+                <ul className="group-tree">
+                  {favoriteHosts.map((host) => (
+                    <li key={`favorite:${host.alias}`}>
                       <div
-                        className="row-main"
-                        onContextMenu={(event) => {
-                          event.preventDefault()
-                          openHostMenu(host)
+                        className={
+                          host.alias === activeHostAlias
+                            ? 'row host-row host active clickable'
+                            : 'row host-row host clickable'
+                        }
+                        draggable
+                        onDragStart={(event) => {
+                          handleDragBegin()
+                          setDragPayload(event, { type: 'host', value: host.alias })
                         }}
+                        onDragEnd={handleDragFinish}
+                        onDoubleClick={() => void connectHost(host.alias)}
                       >
-                        <Server size={14} />
-                        <span>{host.alias}</span>
-                      </div>
-                      <div className="row-actions">
-                        {hostReachability[host.alias] === false ? <ReachabilityIndicator /> : null}
-                        <DeviceOverflowAction
-                          onClick={(event) => {
-                            event.stopPropagation()
+                        <div
+                          className="row-main"
+                          onContextMenu={(event) => {
+                            event.preventDefault()
                             openHostMenu(host)
                           }}
-                        />
+                        >
+                          <Server size={14} />
+                          <span>{host.alias}</span>
+                        </div>
+                        <div className="row-actions">
+                          {hostReachability[host.alias] === false ? (
+                            <ReachabilityIndicator />
+                          ) : null}
+                          <DeviceOverflowAction
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              openHostMenu(host)
+                            }}
+                          />
+                        </div>
                       </div>
-                    </div>
-                  </li>
-                ))}
-                {favoriteHosts.length === 0 ? <li className="empty">No favorites yet</li> : null}
-              </ul>
-            ) : null}
+                    </li>
+                  ))}
+                  {favoriteHosts.length === 0 ? <li className="empty">No favorites yet</li> : null}
+                </ul>
+              ) : null}
 
-            <div
-              className={
-                dropTargetPath === (activeSpaceRoot?.rootGroupPath ?? 'Global')
-                  ? 'row folder-row folder-root clickable drop-target'
-                  : 'row folder-row folder-root clickable'
-              }
-              onClick={() => {
-                if (activeSpaceRoot) return
-                toggleFolder('Global')
-              }}
-              onContextMenu={(event) => {
-                event.preventDefault()
-                openFolderMenu(activeSpaceRoot?.rootGroupPath ?? 'Global', { x: event.clientX, y: event.clientY })
-              }}
-              onDragOver={(event) => {
-                event.preventDefault()
-                handleDragOverFolder(activeSpaceRoot?.rootGroupPath ?? 'Global')
-              }}
-              onDragLeave={() => handleDragLeaveFolder(activeSpaceRoot?.rootGroupPath ?? 'Global')}
-              onDrop={(event) => {
-                event.preventDefault()
-                const payload = getDragPayload(event)
-                if (!payload) return
-                void onDropToFolder(payload, activeSpaceRoot?.rootGroupPath ?? 'Global')
-              }}
-            >
-              <div className="row-main">
-                {activeSpaceRoot ? <FolderOpen size={14} /> : expandedFolders.has('Global') ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                {activeSpaceRoot ? null : expandedFolders.has('Global') ? <FolderOpen size={14} /> : <Folder size={14} />}
-                <span>{activeSpaceName === 'Default' ? 'Global' : activeSpaceName}</span>
-              </div>
-              <button
-                className="row-action clickable"
-                title="Folder actions"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  const rect = event.currentTarget.getBoundingClientRect()
-                  openFolderMenu(activeSpaceRoot?.rootGroupPath ?? 'Global', { x: rect.left, y: rect.bottom + 4 })
+              <div
+                className={
+                  dropTargetPath === (activeSpaceRoot?.rootGroupPath ?? 'Global')
+                    ? 'row folder-row folder-root clickable drop-target'
+                    : 'row folder-row folder-root clickable'
+                }
+                onClick={() => {
+                  if (activeSpaceRoot) return
+                  toggleFolder('Global')
+                }}
+                onContextMenu={(event) => {
+                  event.preventDefault()
+                  openFolderMenu(activeSpaceRoot?.rootGroupPath ?? 'Global', {
+                    x: event.clientX,
+                    y: event.clientY
+                  })
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault()
+                  handleDragOverFolder(activeSpaceRoot?.rootGroupPath ?? 'Global')
+                }}
+                onDragLeave={() =>
+                  handleDragLeaveFolder(activeSpaceRoot?.rootGroupPath ?? 'Global')
+                }
+                onDrop={(event) => {
+                  event.preventDefault()
+                  const payload = getDragPayload(event)
+                  if (!payload) return
+                  void onDropToFolder(payload, activeSpaceRoot?.rootGroupPath ?? 'Global')
                 }}
               >
-                <MoreHorizontal size={14} />
-              </button>
-            </div>
-
-            {(activeSpaceRoot || expandedFolders.has('Global')) && activeTreeNode ? (
-              <GroupTree
-                node={activeTreeNode}
-                expandedFolders={expandedFolders}
-                activeSpaceName={activeSpaceName}
-                activeHostAlias={activeHostAlias}
-                onToggleFolder={toggleFolder}
-                onConnect={connectHost}
-                onHostMenu={openHostMenu}
-                onFolderMenu={openFolderMenu}
-                onDropToFolder={(payload, path) => void onDropToFolder(payload, path)}
-                hostReachability={hostReachability}
-                dropTargetPath={dropTargetPath}
-                onDragOverFolder={handleDragOverFolder}
-                onDragLeaveFolder={handleDragLeaveFolder}
-                onDragBegin={handleDragBegin}
-                onDragFinish={handleDragFinish}
-              />
-            ) : null}
-
-            <div
-              className="row folder-row folder-root clickable"
-              onClick={() => setIsUnassignedExpanded((current) => !current)}
-              onDragOver={(event) => event.preventDefault()}
-              onDrop={(event) => {
-                event.preventDefault()
-                const payload = getDragPayload(event)
-                if (!payload) return
-                void onDropToUnassigned(payload)
-              }}
-            >
-              <div className="row-main">
-                {isUnassignedExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                {isUnassignedExpanded ? <FolderOpen size={14} /> : <Folder size={14} />}
-                <span>Unassigned</span>
+                <div className="row-main">
+                  {activeSpaceRoot ? (
+                    <FolderOpen size={14} />
+                  ) : expandedFolders.has('Global') ? (
+                    <ChevronDown size={14} />
+                  ) : (
+                    <ChevronRight size={14} />
+                  )}
+                  {activeSpaceRoot ? null : expandedFolders.has('Global') ? (
+                    <FolderOpen size={14} />
+                  ) : (
+                    <Folder size={14} />
+                  )}
+                  <span>{activeSpaceName === 'Default' ? 'Global' : activeSpaceName}</span>
+                </div>
+                <button
+                  className="row-action clickable"
+                  title="Folder actions"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    const rect = event.currentTarget.getBoundingClientRect()
+                    openFolderMenu(activeSpaceRoot?.rootGroupPath ?? 'Global', {
+                      x: rect.left,
+                      y: rect.bottom + 4
+                    })
+                  }}
+                >
+                  <MoreHorizontal size={14} />
+                </button>
               </div>
-              <button className="row-action clickable" title="No folder actions" disabled>
-                <MoreHorizontal size={14} />
-              </button>
-            </div>
 
-            {isUnassignedExpanded ? (
-              <ul className="group-tree">
-                {activeUnassignedHosts.map((host) => (
-                  <li key={host.alias}>
-                    <div
-                      className={
-                        host.alias === activeHostAlias
-                          ? 'row host-row host unassigned active clickable'
-                          : 'row host-row host unassigned clickable'
-                      }
-                      draggable
-                      onDragStart={(event) => {
-                        handleDragBegin()
-                        setDragPayload(event, { type: 'host', value: host.alias })
-                      }}
-                      onDragEnd={handleDragFinish}
-                      onDoubleClick={() => void connectHost(host.alias)}
-                    >
+              {(activeSpaceRoot || expandedFolders.has('Global')) && activeTreeNode ? (
+                <GroupTree
+                  node={activeTreeNode}
+                  expandedFolders={expandedFolders}
+                  activeSpaceName={activeSpaceName}
+                  activeHostAlias={activeHostAlias}
+                  onToggleFolder={toggleFolder}
+                  onConnect={connectHost}
+                  onHostMenu={openHostMenu}
+                  onFolderMenu={openFolderMenu}
+                  onDropToFolder={(payload, path) => void onDropToFolder(payload, path)}
+                  hostReachability={hostReachability}
+                  dropTargetPath={dropTargetPath}
+                  onDragOverFolder={handleDragOverFolder}
+                  onDragLeaveFolder={handleDragLeaveFolder}
+                  onDragBegin={handleDragBegin}
+                  onDragFinish={handleDragFinish}
+                />
+              ) : null}
+
+              <div
+                className="row folder-row folder-root clickable"
+                onClick={() => setIsUnassignedExpanded((current) => !current)}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => {
+                  event.preventDefault()
+                  const payload = getDragPayload(event)
+                  if (!payload) return
+                  void onDropToUnassigned(payload)
+                }}
+              >
+                <div className="row-main">
+                  {isUnassignedExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                  {isUnassignedExpanded ? <FolderOpen size={14} /> : <Folder size={14} />}
+                  <span>Unassigned</span>
+                </div>
+                <button className="row-action clickable" title="No folder actions" disabled>
+                  <MoreHorizontal size={14} />
+                </button>
+              </div>
+
+              {isUnassignedExpanded ? (
+                <ul className="group-tree">
+                  {activeUnassignedHosts.map((host) => (
+                    <li key={host.alias}>
                       <div
-                        className="row-main"
-                        onContextMenu={(event) => {
-                          event.preventDefault()
-                          openHostMenu(host)
+                        className={
+                          host.alias === activeHostAlias
+                            ? 'row host-row host unassigned active clickable'
+                            : 'row host-row host unassigned clickable'
+                        }
+                        draggable
+                        onDragStart={(event) => {
+                          handleDragBegin()
+                          setDragPayload(event, { type: 'host', value: host.alias })
                         }}
+                        onDragEnd={handleDragFinish}
+                        onDoubleClick={() => void connectHost(host.alias)}
                       >
-                        <Server size={14} />
-                        <span>{host.alias}</span>
-                      </div>
-                      <div className="row-actions">
-                        {hostReachability[host.alias] === false ? <ReachabilityIndicator /> : null}
-                        <DeviceOverflowAction
-                          onClick={(event) => {
-                            event.stopPropagation()
+                        <div
+                          className="row-main"
+                          onContextMenu={(event) => {
+                            event.preventDefault()
                             openHostMenu(host)
                           }}
-                        />
+                        >
+                          <Server size={14} />
+                          <span>{host.alias}</span>
+                        </div>
+                        <div className="row-actions">
+                          {hostReachability[host.alias] === false ? (
+                            <ReachabilityIndicator />
+                          ) : null}
+                          <DeviceOverflowAction
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              openHostMenu(host)
+                            }}
+                          />
+                        </div>
                       </div>
-                    </div>
-                  </li>
-                ))}
-                {activeUnassignedHosts.length === 0 ? <li className="empty">No unassigned hosts</li> : null}
-              </ul>
-            ) : null}
-
+                    </li>
+                  ))}
+                  {activeUnassignedHosts.length === 0 ? (
+                    <li className="empty">No unassigned hosts</li>
+                  ) : null}
+                </ul>
+              ) : null}
             </div>
 
             <div className="space-selector-wrap">
               <Select
                 classNamePrefix="space-select"
-                value={activeSpaceOptions.find((option) => option.value === activeSpaceName) ?? null}
+                value={
+                  activeSpaceOptions.find((option) => option.value === activeSpaceName) ?? null
+                }
                 options={activeSpaceOptions}
                 onChange={(option) => {
                   if (option) {
@@ -1473,7 +1592,7 @@ function App(): React.JSX.Element {
             <div
               key={tab.id}
               className={tab.id === activeTabId ? 'tab active clickable' : 'tab clickable'}
-              onClick={() => setActiveTabId(tab.id)}
+              onClick={() => activateTab(tab.id)}
             >
               <span>{tab.label}</span>
               <button
@@ -1575,7 +1694,11 @@ function App(): React.JSX.Element {
             <div className="config-row">
               <Select
                 classNamePrefix="space-select"
-                value={destinationSpaceSelectOptions.find((option) => option.value === moveTargetSpaceName) ?? null}
+                value={
+                  destinationSpaceSelectOptions.find(
+                    (option) => option.value === moveTargetSpaceName
+                  ) ?? null
+                }
                 options={destinationSpaceSelectOptions}
                 onChange={(option) => {
                   setMoveTargetSpaceName(option?.value ?? '')
@@ -1607,7 +1730,11 @@ function App(): React.JSX.Element {
           }}
         >
           <div className="modal host-settings-modal" onClick={(event) => event.stopPropagation()}>
-            <h3>{hostSettingsDraft.currentAlias ? `Host settings: ${assigningHost.alias}` : 'Add new device'}</h3>
+            <h3>
+              {hostSettingsDraft.currentAlias
+                ? `Host settings: ${assigningHost.alias}`
+                : 'Add new device'}
+            </h3>
             <div className="host-settings-layout">
               <div className="host-settings-row">
                 <label className="favorite-toggle clickable">
@@ -1615,7 +1742,9 @@ function App(): React.JSX.Element {
                   <input
                     type="checkbox"
                     checked={hostSettingsDraft.isFavorite}
-                    onChange={(event) => updateHostSettingsDraft({ isFavorite: event.target.checked })}
+                    onChange={(event) =>
+                      updateHostSettingsDraft({ isFavorite: event.target.checked })
+                    }
                   />
                   <span className="favorite-toggle-slider" />
                 </label>
@@ -1637,7 +1766,9 @@ function App(): React.JSX.Element {
                   <div className="config-row compact">
                     <input
                       value={hostSettingsDraft.aliasesText}
-                      onChange={(event) => updateHostSettingsDraft({ aliasesText: event.target.value })}
+                      onChange={(event) =>
+                        updateHostSettingsDraft({ aliasesText: event.target.value })
+                      }
                       placeholder="Additional aliases"
                     />
                   </div>
@@ -1691,7 +1822,11 @@ function App(): React.JSX.Element {
                 {ADVANCED_OPTION_GROUPS.map((group, index) => (
                   <div
                     key={`advanced-group:${index}`}
-                    className={group.length > 1 ? 'host-settings-grid host-settings-grid-2' : 'host-settings-grid'}
+                    className={
+                      group.length > 1
+                        ? 'host-settings-grid host-settings-grid-2'
+                        : 'host-settings-grid'
+                    }
                   >
                     {group.map((field) => (
                       <div key={field.key}>
@@ -1760,7 +1895,10 @@ function App(): React.JSX.Element {
             </div>
             <div className="modal-actions">
               <button onClick={() => setEditingFolderPath(null)}>Close</button>
-              <button disabled={editingFolderPath === 'Global'} onClick={() => void deleteDirectory()}>
+              <button
+                disabled={editingFolderPath === 'Global'}
+                onClick={() => void deleteDirectory()}
+              >
                 Delete Directory
               </button>
             </div>
@@ -1808,9 +1946,11 @@ function App(): React.JSX.Element {
             <div className="modal-details">
               <div>{hostKeyAlert.message}</div>
               {hostKeyAlert.fingerprint ? <div>Fingerprint: {hostKeyAlert.fingerprint}</div> : null}
-              {hostKeyAlert.knownHostsPath && hostKeyAlert.offendingLine
-                ? <div>Known hosts entry: {hostKeyAlert.knownHostsPath}:{hostKeyAlert.offendingLine}</div>
-                : null}
+              {hostKeyAlert.knownHostsPath && hostKeyAlert.offendingLine ? (
+                <div>
+                  Known hosts entry: {hostKeyAlert.knownHostsPath}:{hostKeyAlert.offendingLine}
+                </div>
+              ) : null}
             </div>
             <div className="modal-actions">
               <button onClick={() => setHostKeyAlert(null)}>Cancel</button>
@@ -1818,6 +1958,16 @@ function App(): React.JSX.Element {
             </div>
           </div>
         </div>
+      ) : null}
+
+      {isHostSearchOpen ? (
+        <HostSearchPopup
+          hosts={allHosts}
+          openTabs={tabs}
+          onClose={closeHostSearch}
+          onOpenNew={(alias) => openNewHostTabFromSearch(alias)}
+          onSwitchRecent={(alias) => switchToRecentHostTabFromSearch(alias)}
+        />
       ) : null}
     </div>
   )

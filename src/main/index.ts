@@ -9,7 +9,8 @@ app.setName('sshterm')
 const UI_CHANNELS = {
   openSettings: 'ui:openSettings',
   openActiveDeviceSettings: 'ui:openActiveDeviceSettings',
-  toggleSidebar: 'ui:toggleSidebar'
+  toggleSidebar: 'ui:toggleSidebar',
+  openHostSearch: 'ui:openHostSearch'
 } as const
 
 function openSettingsFromMenu(): void {
@@ -106,6 +107,12 @@ function createWindow(): void {
     if (input.key.toLowerCase() === 's') {
       event.preventDefault()
       mainWindow.webContents.send(UI_CHANNELS.toggleSidebar)
+      return
+    }
+
+    if (input.key.toLowerCase() === 't') {
+      event.preventDefault()
+      mainWindow.webContents.send(UI_CHANNELS.openHostSearch)
     }
   })
 
