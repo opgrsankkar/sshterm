@@ -1,6 +1,6 @@
 ---
 name: update-version
-description: 'Use when updating the app version, preparing a release PR, or invoking /update-version <version>. Validates the requested version against package.json and the latest git tag, updates package.json and package-lock.json, summarizes changes since the previous tagged commit, and opens a pull request.'
+description: 'Use when updating the app version for a reviewed release or invoking /update-version <version>. Validates the requested version against package.json and the latest git tag, updates package.json and package-lock.json, summarizes changes since the previous tagged commit, commits the version bump, and pushes an annotated release tag.'
 argument-hint: '<target-version>'
 disable-model-invocation: true
 ---
@@ -8,6 +8,8 @@ disable-model-invocation: true
 # Update Version
 
 Use this skill for release-style version bumps such as `/update-version 0.0.3-alpha`.
+
+Invoking this skill means the release has already been reviewed and is ready to ship. The default behavior is to bump the version, commit it, create the annotated `v<target-version>` tag, and push the branch and tag so downstream GitHub Actions can run. Do not wait for an additional confirmation before tagging unless the user explicitly asks for a PR-only or no-tag workflow.
 
 ## Inputs
 
@@ -26,7 +28,7 @@ Use this skill for release-style version bumps such as `/update-version 0.0.3-al
    - `lockfileVersion` from `package-lock.json`
    - `latestTag` and normalized `latestTagVersion`
    - whether the target is greater than both the current version and the latest tag
-   - the git range to summarize in the PR body
+   - the git range to summarize in the release summary
 
 2. Stop immediately if:
    - the argument is missing
@@ -60,7 +62,7 @@ Use this skill for release-style version bumps such as `/update-version 0.0.3-al
 
    If there is no prior tag, summarize the repository history instead.
 
-7. Run the existing repo checks before opening the PR:
+7. Run the existing repo checks before pushing the release:
 
    ```bash
    npm run lint
@@ -75,17 +77,21 @@ Use this skill for release-style version bumps such as `/update-version 0.0.3-al
    git commit -m "chore: bump version to v<target-version>"
    ```
 
-9. Push the branch and open a PR with:
+9. Create an annotated release tag from the version bump commit and push both the branch and tag:
+   - `git tag -a v<target-version> -m "v<target-version>"`
    - `git push -u origin HEAD`
-   - a release-oriented title, such as `chore: release v<target-version>`
-   - a short summary of the version bump
-   - the collected change list since the previous tag
-   - the validation commands that passed
+   - `git push origin v<target-version>`
 
-10. Tag handling:
-    - Treat `v<target-version>` as the next release tag value.
-    - Do **not** push a new tag before review/merge unless the user explicitly asks for that behavior.
-    - If the user later asks to create the tag, create an annotated `v<target-version>` tag from the merged release commit.
+10. Report back with:
+    - the branch name
+    - the release commit SHA
+    - the pushed tag name
+    - the collected change list since the previous tag
+    - the validation commands that passed or failed
+
+11. Optional PR handling:
+    - Only open a PR if the user explicitly asks for one.
+    - If a PR is requested, use a release-oriented title such as `chore: release v<target-version>` and include the version summary, collected changes, and validation results.
 
 ## Notes
 
