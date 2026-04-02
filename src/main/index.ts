@@ -1,6 +1,6 @@
 import { app, shell, BrowserWindow, Menu } from 'electron'
 import { join } from 'path'
-import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import { electronApp, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { registerIpcHandlers } from './ipc'
 
@@ -9,7 +9,13 @@ app.setName('sshterm')
 const UI_CHANNELS = {
   openSettings: 'ui:openSettings',
   openActiveDeviceSettings: 'ui:openActiveDeviceSettings',
-  toggleSidebar: 'ui:toggleSidebar'
+  toggleSidebar: 'ui:toggleSidebar',
+  refreshHosts: 'ui:refreshHosts',
+  openNewHost: 'ui:openNewHost',
+  activateNextTab: 'ui:activateNextTab',
+  activatePreviousTab: 'ui:activatePreviousTab',
+  activateNextSpace: 'ui:activateNextSpace',
+  activatePreviousSpace: 'ui:activatePreviousSpace'
 } as const
 
 function openSettingsFromMenu(): void {
@@ -55,7 +61,7 @@ function setupApplicationMenu(): void {
     },
     {
       label: 'View',
-      submenu: [{ role: 'reload' }, { role: 'forceReload' }, { role: 'toggleDevTools' }]
+      submenu: [{ role: 'toggleDevTools' }]
     },
     {
       label: 'Window',
@@ -90,8 +96,42 @@ function createWindow(): void {
   mainWindow.webContents.on('before-input-event', (event, input) => {
     if (input.type !== 'keyDown') return
 
+    if (input.key === 'F12') {
+      event.preventDefault()
+      mainWindow.webContents.toggleDevTools()
+      return
+    }
+
+    if (input.control && input.key === 'Tab') {
+      event.preventDefault()
+      mainWindow.webContents.send(
+        input.shift ? UI_CHANNELS.activatePreviousTab : UI_CHANNELS.activateNextTab
+      )
+      return
+    }
+
+    if (input.alt && input.key === 'Tab') {
+      event.preventDefault()
+      mainWindow.webContents.send(
+        input.shift ? UI_CHANNELS.activatePreviousSpace : UI_CHANNELS.activateNextSpace
+      )
+      return
+    }
+
     const isCommandOrControlPressed = process.platform === 'darwin' ? input.meta : input.control
     if (!isCommandOrControlPressed) return
+
+    if (process.platform === 'darwin' && input.meta && input.key.toLowerCase() === 'r') {
+      event.preventDefault()
+      mainWindow.webContents.send(UI_CHANNELS.refreshHosts)
+      return
+    }
+
+    if (process.platform === 'darwin' && input.meta && input.key.toLowerCase() === 'n') {
+      event.preventDefault()
+      mainWindow.webContents.send(UI_CHANNELS.openNewHost)
+      return
+    }
 
     if (input.key === ',') {
       event.preventDefault()
@@ -133,13 +173,6 @@ app.whenReady().then(() => {
   if (process.platform === 'darwin' && app.dock) {
     app.dock.setIcon(icon)
   }
-
-  // Default open or close DevTools by F12 in development
-  // and ignore CommandOrControl + R in production.
-  // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
-  app.on('browser-window-created', (_, window) => {
-    optimizer.watchWindowShortcuts(window)
-  })
 
   setupApplicationMenu()
 

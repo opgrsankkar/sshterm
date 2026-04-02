@@ -1,13 +1,16 @@
 import { ElectronAPI } from '@electron-toolkit/preload'
-import type { AppSettings, CreateSessionRequest, HostOptions, SessionCreated, SshConfigModel } from '../shared/types'
+import type {
+  AppSettings,
+  CreateSessionRequest,
+  HostOptions,
+  SessionCreated,
+  SshConfigModel
+} from '../shared/types'
 
 interface SshtermApi {
   getSettings: () => Promise<AppSettings>
   setConfigPath: (configPath: string) => Promise<SshConfigModel>
-  updateSettings: (input: {
-    configFilePath?: string
-    scrollbackLines?: number
-  }) => Promise<{
+  updateSettings: (input: { configFilePath?: string; scrollbackLines?: number }) => Promise<{
     settings: AppSettings
     model: SshConfigModel
   }>
@@ -35,7 +38,9 @@ interface SshtermApi {
     isFavorite: boolean
     options: HostOptions
   }) => Promise<SshConfigModel>
-  checkReachability: (hosts: Array<{ alias: string; target: string }>) => Promise<Array<{ alias: string; reachable: boolean }>>
+  checkReachability: (
+    hosts: Array<{ alias: string; target: string }>
+  ) => Promise<Array<{ alias: string; reachable: boolean }>>
   clearHostGroup: (alias: string) => Promise<SshConfigModel>
   createSession: (request: CreateSessionRequest) => Promise<SessionCreated>
   acceptHostKeyChange: (alias: string) => Promise<void>
@@ -44,17 +49,25 @@ interface SshtermApi {
   closeSession: (sessionId: string) => Promise<void>
   onSessionData: (listener: (payload: { sessionId: string; data: string }) => void) => () => void
   onSessionExit: (listener: (payload: { sessionId: string; code: number }) => void) => () => void
-  onSessionHostKeyChanged: (listener: (payload: {
-    sessionId: string
-    alias: string
-    fingerprint: string | null
-    knownHostsPath: string | null
-    offendingLine: number | null
-    message: string
-  }) => void) => () => void
+  onSessionHostKeyChanged: (
+    listener: (payload: {
+      sessionId: string
+      alias: string
+      fingerprint: string | null
+      knownHostsPath: string | null
+      offendingLine: number | null
+      message: string
+    }) => void
+  ) => () => void
   onOpenSettings: (listener: () => void) => () => void
   onOpenActiveDeviceSettings: (listener: () => void) => () => void
   onToggleSidebar: (listener: () => void) => () => void
+  onRefreshHosts: (listener: () => void) => () => void
+  onOpenNewHost: (listener: () => void) => () => void
+  onActivateNextTab: (listener: () => void) => () => void
+  onActivatePreviousTab: (listener: () => void) => () => void
+  onActivateNextSpace: (listener: () => void) => () => void
+  onActivatePreviousSpace: (listener: () => void) => () => void
 }
 
 declare global {
