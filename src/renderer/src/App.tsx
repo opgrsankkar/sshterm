@@ -19,7 +19,8 @@ import {
 } from 'lucide-react'
 import type { GroupNode, HostEntry, HostOptions, SshConfigModel } from '../../shared/types'
 import HostSearchPopup from './components/HostSearchPopup'
-import TerminalView from './components/TerminalView'
+import TerminalSearchSidebar from './components/TerminalSearchSidebar'
+import TerminalView, { type TerminalSearchResult } from './components/TerminalView'
 
 interface SessionTab {
   id: string
@@ -56,7 +57,22 @@ interface AuthenticationFallbackAlert {
   debugSummary: string | null
 }
 
+interface SessionExitAlert {
+  tabId: string
+  sessionId: string
+  alias: string
+  exitCode: number
+}
+
 type ReachabilityState = Record<string, boolean | undefined>
+type TerminalSearchScope = 'current' | 'all'
+
+interface ScopedTerminalSearchResult extends TerminalSearchResult {
+  globalId: string
+  tabId: string
+  tabLabel: string
+  isCurrentTab: boolean
+}
 
 interface HostSettingsDraft {
   currentAlias: string
@@ -641,6 +657,33 @@ function getTabAccessOrder(
   return ordered
 }
 
+function getSearchTabOrder(tabs: SessionTab[], activeTabId: string | null): SessionTab[] {
+  return [...tabs].sort((a, b) => {
+    if (a.id === activeTabId) return -1
+    if (b.id === activeTabId) return 1
+    if (b.lastActivatedAt !== a.lastActivatedAt) {
+      return b.lastActivatedAt - a.lastActivatedAt
+    }
+    return 0
+  })
+}
+
+function createTerminalSearchResultGlobalId(tabId: string, resultId: string): string {
+  return `${tabId}::${resultId}`
+}
+
+function parseTerminalSearchResultGlobalId(
+  globalId: string | null
+): { tabId: string; resultId: string } | null {
+  if (!globalId) return null
+  const separatorIndex = globalId.indexOf('::')
+  if (separatorIndex === -1) return null
+  return {
+    tabId: globalId.slice(0, separatorIndex),
+    resultId: globalId.slice(separatorIndex + 2)
+  }
+}
+
 function App(): React.JSX.Element {
   const [model, setModel] = useState<SshConfigModel | null>(null)
   const [tabs, setTabs] = useState<SessionTab[]>([])
@@ -670,6 +713,17 @@ function App(): React.JSX.Element {
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isHostSearchOpen, setIsHostSearchOpen] = useState(false)
+  const [isTerminalSearchOpen, setIsTerminalSearchOpen] = useState(false)
+  const [terminalSearchScope, setTerminalSearchScope] = useState<TerminalSearchScope>('current')
+  const [terminalSearchQuery, setTerminalSearchQuery] = useState('')
+  const [terminalSearchResultsByTab, setTerminalSearchResultsByTab] = useState<
+    Record<string, TerminalSearchResult[]>
+  >({})
+  const [selectedTerminalSearchResultId, setSelectedTerminalSearchResultId] = useState<string | null>(
+    null
+  )
+  const [terminalSearchJumpNonce, setTerminalSearchJumpNonce] = useState(0)
+  const [terminalSearchFocusNonce, setTerminalSearchFocusNonce] = useState(0)
   const [settingsConfigPath, setSettingsConfigPath] = useState('')
   const [settingsScrollbackLines, setSettingsScrollbackLines] = useState(5000)
   const [settingsError, setSettingsError] = useState<string | null>(null)
@@ -677,6 +731,7 @@ function App(): React.JSX.Element {
   const [authFallbackAlert, setAuthFallbackAlert] = useState<AuthenticationFallbackAlert | null>(
     null
   )
+  const [sessionExitAlert, setSessionExitAlert] = useState<SessionExitAlert | null>(null)
 
   const [expandedPickerFolders, setExpandedPickerFolders] = useState<Set<string>>(
     new Set(['Global'])
@@ -697,6 +752,25 @@ function App(): React.JSX.Element {
   const activeTab = useMemo(
     () => tabs.find((tab) => tab.id === activeTabId) ?? null,
     [tabs, activeTabId]
+  )
+  const searchTabOrder = useMemo(() => getSearchTabOrder(tabs, activeTabId), [tabs, activeTabId])
+  const visibleTerminalSearchResults = useMemo<ScopedTerminalSearchResult[]>(() => {
+    const orderedTabs =
+      terminalSearchScope === 'current' ? (activeTab ? [activeTab] : []) : searchTabOrder
+
+    return orderedTabs.flatMap((tab) =>
+      (terminalSearchResultsByTab[tab.id] ?? []).map((result) => ({
+        ...result,
+        globalId: createTerminalSearchResultGlobalId(tab.id, result.id),
+        tabId: tab.id,
+        tabLabel: tab.label,
+        isCurrentTab: tab.id === activeTabId
+      }))
+    )
+  }, [terminalSearchResultsByTab, terminalSearchScope, activeTab, searchTabOrder, activeTabId])
+  const selectedTerminalSearchResultParts = useMemo(
+    () => parseTerminalSearchResultGlobalId(selectedTerminalSearchResultId),
+    [selectedTerminalSearchResultId]
   )
   const activeHostAlias = activeTab?.label ?? null
   const favoriteHosts = useMemo(
@@ -781,6 +855,37 @@ function App(): React.JSX.Element {
     [model, activeSpaceName]
   )
 
+  const closeTerminalSearch = useCallback((): void => {
+    setIsTerminalSearchOpen(false)
+    setTerminalSearchQuery('')
+    setTerminalSearchScope('current')
+    setTerminalSearchResultsByTab({})
+    setSelectedTerminalSearchResultId(null)
+    setTerminalSearchJumpNonce(0)
+    setTerminalSearchFocusNonce(0)
+  }, [])
+
+  const selectTerminalSearchResult = useCallback(
+    (globalResultId: string, tabId: string): void => {
+      setSelectedTerminalSearchResultId(globalResultId)
+      if (tabId !== activeTabId) {
+        activateTab(tabId)
+      }
+      setTerminalSearchJumpNonce((current) => current + 1)
+    },
+    [activeTabId, activateTab]
+  )
+
+  const openTerminalSearchWithScope = useCallback(
+    (scope: TerminalSearchScope): void => {
+      if (!activeTab && tabs.length === 0) return
+      setIsTerminalSearchOpen(true)
+      setTerminalSearchScope(scope)
+      setTerminalSearchFocusNonce((current) => current + 1)
+    },
+    [activeTab, tabs.length]
+  )
+
   useEffect(() => {
     if (!model) return
     if (model.availableSpaceNames.includes(activeSpaceName)) return
@@ -792,6 +897,13 @@ function App(): React.JSX.Element {
     tabAccessHistoryRef.current = tabAccessHistoryRef.current.filter((tabId) =>
       openTabIds.has(tabId)
     )
+    setTerminalSearchResultsByTab((previous) => {
+      const nextEntries = Object.entries(previous).filter(([tabId]) => openTabIds.has(tabId))
+      if (nextEntries.length === Object.keys(previous).length) {
+        return previous
+      }
+      return Object.fromEntries(nextEntries)
+    })
 
     if (!activeTabId || !openTabIds.has(activeTabId)) return
 
@@ -875,7 +987,17 @@ function App(): React.JSX.Element {
   }, [])
 
   useEffect(() => {
+    const dispose = window.api.onOpenTerminalSearch(({ scope }) => {
+      openTerminalSearchWithScope(scope)
+    })
+    return () => dispose()
+  }, [openTerminalSearchWithScope])
+
+  useEffect(() => {
     const dispose = window.api.onSessionHostKeyChanged((payload) => {
+      setSessionExitAlert((current) =>
+        current?.sessionId === payload.sessionId ? null : current
+      )
       setHostKeyAlert(payload)
     })
     return () => dispose()
@@ -883,73 +1005,60 @@ function App(): React.JSX.Element {
 
   useEffect(() => {
     const dispose = window.api.onSessionAuthenticationFallback((payload) => {
+      setSessionExitAlert((current) =>
+        current?.sessionId === payload.sessionId ? null : current
+      )
       setAuthFallbackAlert(payload)
     })
     return () => dispose()
   }, [])
 
   useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Control' || event.key === 'Meta') {
-        tabSwitchCycleRef.current = null
-      }
+    if (!isTerminalSearchOpen) return
+    if (activeTabId || tabs.length > 0) return
+    closeTerminalSearch()
+  }, [activeTabId, tabs.length, isTerminalSearchOpen, closeTerminalSearch])
 
-      if (event.key !== 'Escape') return
+  useEffect(() => {
+    if (!selectedTerminalSearchResultId) return
+    if (!visibleTerminalSearchResults.some((result) => result.globalId === selectedTerminalSearchResultId)) {
+      setSelectedTerminalSearchResultId(visibleTerminalSearchResults[0]?.globalId ?? null)
+    }
+  }, [selectedTerminalSearchResultId, visibleTerminalSearchResults])
 
-      if (hostKeyAlert) {
-        setHostKeyAlert(null)
-        return
-      }
+  useEffect(() => {
+    if (!isTerminalSearchOpen || !activeTabId) return
 
-      if (isHostSearchOpen) {
-        setIsHostSearchOpen(false)
-        return
+    if (terminalSearchScope === 'current') {
+      const nextCurrentResult =
+        visibleTerminalSearchResults.find((result) => result.tabId === activeTabId) ??
+        visibleTerminalSearchResults[0] ??
+        null
+      if (
+        nextCurrentResult &&
+        (!selectedTerminalSearchResultParts || selectedTerminalSearchResultParts.tabId !== activeTabId)
+      ) {
+        setSelectedTerminalSearchResultId(nextCurrentResult.globalId)
       }
-
-      if (authFallbackAlert) {
-        setAuthFallbackAlert(null)
-        return
-      }
-
-      if (assigningHost || hostSettingsDraft) {
-        setAssigningHost(null)
-        setHostSettingsDraft(null)
-        setIsAdvancedExpanded(false)
-        return
-      }
-
-      if (editingFolderPath) {
-        setEditingFolderPath(null)
-        return
-      }
-
-      if (movingFolderPath) {
-        setMovingFolderPath(null)
-        return
-      }
-
-      if (folderContextMenu) {
-        setFolderContextMenu(null)
-        return
-      }
-
-      if (isSettingsOpen) {
-        setIsSettingsOpen(false)
-      }
+      return
     }
 
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
+    const nextCurrentResult =
+      visibleTerminalSearchResults.find((result) => result.tabId === activeTabId) ??
+      visibleTerminalSearchResults[0] ??
+      null
+    if (!nextCurrentResult) return
+
+    if (!selectedTerminalSearchResultParts || selectedTerminalSearchResultParts.tabId !== activeTabId) {
+      setSelectedTerminalSearchResultId(nextCurrentResult.globalId)
+    }
   }, [
-    hostKeyAlert,
-    isHostSearchOpen,
-    authFallbackAlert,
-    assigningHost,
-    hostSettingsDraft,
-    editingFolderPath,
-    movingFolderPath,
-    folderContextMenu,
-    isSettingsOpen
+    activeTabId,
+    isTerminalSearchOpen,
+    terminalSearchScope,
+    visibleTerminalSearchResults,
+    selectedTerminalSearchResultId,
+    selectedTerminalSearchResultParts
   ])
   useEffect(() => {
     const onKeyUp = (event: KeyboardEvent): void => {
@@ -1048,6 +1157,9 @@ function App(): React.JSX.Element {
       if (authFallbackAlert?.sessionId === tab.sessionId) {
         setAuthFallbackAlert(null)
       }
+      if (sessionExitAlert?.sessionId === tab.sessionId) {
+        setSessionExitAlert(null)
+      }
 
       setTabs((previous) => {
         const remaining = previous.filter((entry) => entry.id !== tab.id)
@@ -1071,7 +1183,7 @@ function App(): React.JSX.Element {
         // best effort: session may already be closed
       }
     },
-    [authFallbackAlert?.sessionId, hostKeyAlert?.sessionId]
+    [authFallbackAlert?.sessionId, hostKeyAlert?.sessionId, sessionExitAlert?.sessionId]
   )
 
   useEffect(() => {
@@ -1081,6 +1193,33 @@ function App(): React.JSX.Element {
     })
     return () => dispose()
   }, [activeTab, closeTab])
+
+  useEffect(() => {
+    const dispose = window.api.onSessionExit((payload) => {
+      const closedTab = tabs.find((tab) => tab.sessionId === payload.sessionId)
+      if (!closedTab) return
+
+      if (payload.code === 0) {
+        void closeTab(closedTab)
+        return
+      }
+
+      if (
+        hostKeyAlert?.sessionId === payload.sessionId ||
+        authFallbackAlert?.sessionId === payload.sessionId
+      ) {
+        return
+      }
+
+      setSessionExitAlert({
+        tabId: closedTab.id,
+        sessionId: closedTab.sessionId,
+        alias: closedTab.label,
+        exitCode: payload.code
+      })
+    })
+    return () => dispose()
+  }, [tabs, closeTab, hostKeyAlert?.sessionId, authFallbackAlert?.sessionId])
 
   const openFolderMenu = (groupPath: string, anchor: { x: number; y: number }): void => {
     setFolderContextMenu({
@@ -1503,6 +1642,163 @@ function App(): React.JSX.Element {
     }
   }
 
+  const closeExitedSessionTab = useCallback(async (): Promise<void> => {
+    if (!sessionExitAlert) return
+
+    const existingTab = tabs.find(
+      (tab) => tab.id === sessionExitAlert.tabId && tab.sessionId === sessionExitAlert.sessionId
+    )
+    setSessionExitAlert(null)
+    if (!existingTab) return
+    await closeTab(existingTab)
+  }, [sessionExitAlert, tabs, closeTab])
+
+  const reopenExitedSession = useCallback(async (): Promise<void> => {
+    if (!sessionExitAlert) return
+
+    try {
+      setConnectionError(null)
+      const existingTab = tabs.find(
+        (tab) => tab.id === sessionExitAlert.tabId && tab.sessionId === sessionExitAlert.sessionId
+      )
+      if (!existingTab) {
+        setSessionExitAlert(null)
+        return
+      }
+
+      try {
+        await window.api.closeSession(existingTab.sessionId)
+      } catch {
+        // ignore; session is already gone
+      }
+
+      const { sessionId: nextSessionId } = await window.api.createSession({
+        alias: existingTab.label,
+        cols: 120,
+        rows: 32
+      })
+
+      setTabs((previous) =>
+        previous.map((tab) =>
+          tab.id === existingTab.id
+            ? {
+                ...tab,
+                sessionId: nextSessionId
+              }
+            : tab
+        )
+      )
+      activateTab(existingTab.id)
+      setSessionExitAlert(null)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setConnectionError(`Failed to reopen session for ${sessionExitAlert.alias}: ${message}`)
+    }
+  }, [sessionExitAlert, tabs, activateTab])
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Control' || event.key === 'Meta') {
+        tabSwitchCycleRef.current = null
+      }
+
+      if (sessionExitAlert) {
+        if (event.key === 'Enter') {
+          event.preventDefault()
+          void reopenExitedSession()
+          return
+        }
+
+        if (event.key === 'Escape') {
+          event.preventDefault()
+          void closeExitedSessionTab()
+          return
+        }
+      }
+
+      if (hostKeyAlert && event.key === 'Enter') {
+        event.preventDefault()
+        void acceptHostKeyAndReconnect()
+        return
+      }
+
+      if (authFallbackAlert && event.key === 'Enter') {
+        event.preventDefault()
+        void retryAuthenticationWithPasswordFallback()
+        return
+      }
+
+      if (event.key === 'Escape' && isTerminalSearchOpen) {
+        event.preventDefault()
+        closeTerminalSearch()
+        return
+      }
+
+      if (event.key !== 'Escape') return
+
+      if (hostKeyAlert) {
+        setHostKeyAlert(null)
+        return
+      }
+
+      if (isHostSearchOpen) {
+        setIsHostSearchOpen(false)
+        return
+      }
+
+      if (authFallbackAlert) {
+        setAuthFallbackAlert(null)
+        return
+      }
+
+      if (assigningHost || hostSettingsDraft) {
+        setAssigningHost(null)
+        setHostSettingsDraft(null)
+        setIsAdvancedExpanded(false)
+        return
+      }
+
+      if (editingFolderPath) {
+        setEditingFolderPath(null)
+        return
+      }
+
+      if (movingFolderPath) {
+        setMovingFolderPath(null)
+        return
+      }
+
+      if (folderContextMenu) {
+        setFolderContextMenu(null)
+        return
+      }
+
+      if (isSettingsOpen) {
+        setIsSettingsOpen(false)
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [
+    sessionExitAlert,
+    reopenExitedSession,
+    closeExitedSessionTab,
+    hostKeyAlert,
+    isHostSearchOpen,
+    isTerminalSearchOpen,
+    authFallbackAlert,
+    acceptHostKeyAndReconnect,
+    retryAuthenticationWithPasswordFallback,
+    assigningHost,
+    hostSettingsDraft,
+    editingFolderPath,
+    movingFolderPath,
+    folderContextMenu,
+    isSettingsOpen,
+    closeTerminalSearch
+  ])
+
   const contextMenuFolderNode =
     model && folderContextMenu
       ? findGroupByPath(model.globalRoot, folderContextMenu.groupPath)
@@ -1837,24 +2133,76 @@ function App(): React.JSX.Element {
           ))}
         </div>
 
-        <div className="terminal-area">
-          {connectionError ? <div className="error-banner">{connectionError}</div> : null}
-          {tabs.length > 0 ? (
-            tabs.map((tab) => (
-              <div
-                key={`${tab.id}:${tab.sessionId}`}
-                className={tab.id === activeTabId ? 'terminal-pane active' : 'terminal-pane hidden'}
-              >
-                <TerminalView
-                  sessionId={tab.sessionId}
-                  isActive={tab.id === activeTabId}
-                  scrollbackLines={settingsScrollbackLines}
-                />
-              </div>
-            ))
-          ) : (
-            <div className="empty">Select a host to open a session</div>
-          )}
+        <div className="terminal-workbench">
+          <div className="terminal-area">
+            {connectionError ? <div className="error-banner">{connectionError}</div> : null}
+            {tabs.length > 0 ? (
+              tabs.map((tab) => (
+                <div
+                  key={`${tab.id}:${tab.sessionId}`}
+                  className={tab.id === activeTabId ? 'terminal-pane active' : 'terminal-pane hidden'}
+                >
+                  <TerminalView
+                    sessionId={tab.sessionId}
+                    isActive={tab.id === activeTabId}
+                    scrollbackLines={settingsScrollbackLines}
+                    isSearchOpen={isTerminalSearchOpen}
+                    searchScope={terminalSearchScope}
+                    searchQuery={isTerminalSearchOpen ? terminalSearchQuery : ''}
+                    selectedSearchResultId={
+                      selectedTerminalSearchResultParts?.tabId === tab.id
+                        ? selectedTerminalSearchResultParts.resultId
+                        : null
+                    }
+                    searchJumpNonce={
+                      selectedTerminalSearchResultParts?.tabId === tab.id ? terminalSearchJumpNonce : 0
+                    }
+                    onSearchResultsChange={(results) => {
+                      setTerminalSearchResultsByTab((previous) => {
+                        const current = previous[tab.id] ?? []
+                        const currentKey = current.map((result) => result.id).join('|')
+                        const nextKey = results.map((result) => result.id).join('|')
+                        if (currentKey === nextKey) return previous
+                        return { ...previous, [tab.id]: results }
+                      })
+                    }}
+                    onSelectedSearchResultChange={(resultId) => {
+                      if (tab.id !== activeTabId) return
+                      setSelectedTerminalSearchResultId(
+                        resultId ? createTerminalSearchResultGlobalId(tab.id, resultId) : null
+                      )
+                    }}
+                  />
+                </div>
+              ))
+            ) : (
+              <div className="empty">Select a host to open a session</div>
+            )}
+          </div>
+
+          {isTerminalSearchOpen && activeTab ? (
+            <TerminalSearchSidebar
+              query={terminalSearchQuery}
+              scope={terminalSearchScope}
+              results={visibleTerminalSearchResults}
+              selectedResultId={selectedTerminalSearchResultId}
+              focusNonce={terminalSearchFocusNonce}
+              onQueryChange={(value) => {
+                setTerminalSearchQuery(value)
+                setSelectedTerminalSearchResultId(null)
+                setTerminalSearchJumpNonce((current) => current + 1)
+              }}
+              onScopeChange={(value) => {
+                setTerminalSearchScope(value)
+                setSelectedTerminalSearchResultId(null)
+                setTerminalSearchFocusNonce((current) => current + 1)
+              }}
+              onSelectResult={(resultId, tabId) => {
+                selectTerminalSearchResult(resultId, tabId)
+              }}
+              onClose={closeTerminalSearch}
+            />
+          ) : null}
         </div>
       </main>
 
@@ -2181,9 +2529,29 @@ function App(): React.JSX.Element {
                 </div>
               ) : null}
             </div>
+            <div className="hint">Press Enter to accept and reconnect, or Esc to cancel.</div>
             <div className="modal-actions">
               <button onClick={() => setHostKeyAlert(null)}>Cancel</button>
               <button onClick={() => void acceptHostKeyAndReconnect()}>Accept and Reconnect</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {sessionExitAlert ? (
+        <div className="modal-overlay" onClick={() => void closeExitedSessionTab()}>
+          <div className="modal" onClick={(event) => event.stopPropagation()}>
+            <h3>Session exited for {sessionExitAlert.alias}</h3>
+            <div className="modal-details">
+              <div>
+                The connection closed with exit code <code>{sessionExitAlert.exitCode}</code>.
+              </div>
+              <div>This tab is no longer usable.</div>
+            </div>
+            <div className="hint">Press Enter to reopen, or Esc to close this tab.</div>
+            <div className="modal-actions">
+              <button onClick={() => void closeExitedSessionTab()}>Close Tab</button>
+              <button onClick={() => void reopenExitedSession()}>Reopen</button>
             </div>
           </div>
         </div>
@@ -2210,6 +2578,7 @@ function App(): React.JSX.Element {
               </div>
               {authFallbackAlert.debugSummary ? <div>{authFallbackAlert.debugSummary}</div> : null}
             </div>
+            <div className="hint">Press Enter to retry, or Esc to cancel.</div>
             <div className="modal-actions">
               <button onClick={() => setAuthFallbackAlert(null)}>Cancel</button>
               <button onClick={() => void retryAuthenticationWithPasswordFallback()}>

@@ -44,8 +44,11 @@ const CHANNELS = {
   activateNextSpace: 'ui:activateNextSpace',
   activatePreviousSpace: 'ui:activatePreviousSpace',
   openHostSearch: 'ui:openHostSearch',
+  openTerminalSearch: 'ui:openTerminalSearch',
   closeActiveTab: 'ui:closeActiveTab'
 } as const
+
+type TerminalSearchScope = 'current' | 'all'
 
 // Custom APIs for renderer
 const api = {
@@ -246,6 +249,15 @@ const api = {
     }
     electronAPI.ipcRenderer.on(CHANNELS.openHostSearch, wrapped)
     return () => electronAPI.ipcRenderer.removeListener(CHANNELS.openHostSearch, wrapped)
+  },
+  onOpenTerminalSearch: (
+    listener: (payload: { scope: TerminalSearchScope }) => void
+  ): (() => void) => {
+    const wrapped = (_event: unknown, payload?: { scope?: TerminalSearchScope }): void => {
+      listener({ scope: payload?.scope === 'all' ? 'all' : 'current' })
+    }
+    electronAPI.ipcRenderer.on(CHANNELS.openTerminalSearch, wrapped)
+    return () => electronAPI.ipcRenderer.removeListener(CHANNELS.openTerminalSearch, wrapped)
   },
   onCloseActiveTab: (listener: () => void): (() => void) => {
     const wrapped = (): void => {
