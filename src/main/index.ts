@@ -17,8 +17,11 @@ const UI_CHANNELS = {
   activateNextSpace: 'ui:activateNextSpace',
   activatePreviousSpace: 'ui:activatePreviousSpace',
   openHostSearch: 'ui:openHostSearch',
+  openTerminalSearch: 'ui:openTerminalSearch',
   closeActiveTab: 'ui:closeActiveTab'
 } as const
+
+type TerminalSearchScope = 'current' | 'all'
 
 function openSettingsFromMenu(): void {
   const focused = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
@@ -30,6 +33,12 @@ function closeActiveTabFromMenu(): void {
   const focused = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
   if (!focused) return
   focused.webContents.send(UI_CHANNELS.closeActiveTab)
+}
+
+function openTerminalSearchFromMenu(scope: TerminalSearchScope): void {
+  const focused = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+  if (!focused) return
+  focused.webContents.send(UI_CHANNELS.openTerminalSearch, { scope })
 }
 
 function setupApplicationMenu(): void {
@@ -59,6 +68,17 @@ function setupApplicationMenu(): void {
       submenu: [
         { role: 'undo' },
         { role: 'redo' },
+        { type: 'separator' },
+        {
+          label: 'Find',
+          accelerator: 'CommandOrControl+F',
+          click: () => openTerminalSearchFromMenu('current')
+        },
+        {
+          label: 'Find in All Tabs',
+          accelerator: 'CommandOrControl+Shift+F',
+          click: () => openTerminalSearchFromMenu('all')
+        },
         { type: 'separator' },
         { role: 'cut' },
         { role: 'copy' },
@@ -170,6 +190,14 @@ function createWindow(): void {
     if (input.key.toLowerCase() === 't') {
       event.preventDefault()
       mainWindow.webContents.send(UI_CHANNELS.openHostSearch)
+      return
+    }
+
+    if (input.key.toLowerCase() === 'f') {
+      event.preventDefault()
+      mainWindow.webContents.send(UI_CHANNELS.openTerminalSearch, {
+        scope: input.shift ? 'all' : 'current'
+      })
       return
     }
 
