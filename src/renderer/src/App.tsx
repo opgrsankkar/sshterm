@@ -67,6 +67,17 @@ interface SessionExitAlert {
 type ReachabilityState = Record<string, boolean | undefined>
 type TerminalSearchScope = 'current' | 'all'
 
+function createTabId(): string {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID()
+
+  const bytes = new Uint8Array(16)
+  crypto.getRandomValues(bytes)
+  bytes[6] = (bytes[6] & 0x0f) | 0x40
+  bytes[8] = (bytes[8] & 0x3f) | 0x80
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
+
 interface ScopedTerminalSearchResult extends TerminalSearchResult {
   globalId: string
   tabId: string
@@ -1138,7 +1149,7 @@ function App(): React.JSX.Element {
 
       const lastActivatedAt = Date.now()
       const { sessionId } = await window.api.createSession({ alias, cols: 120, rows: 32 })
-      const tab: SessionTab = { id: crypto.randomUUID(), label: alias, sessionId, lastActivatedAt }
+      const tab: SessionTab = { id: createTabId(), label: alias, sessionId, lastActivatedAt }
       setTabs((previous) => [...previous, tab])
       activateTab(tab.id)
       return true
