@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.sshterm.local-server</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/node</string>
+    <string>/Users/sankkr/Library/Application Support/sshterm-server/dist/server/server/index.js</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/sankkr/Library/Application Support/sshterm-server</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>NODE_ENV</key>
+    <string>production</string>
+    <key>PORT</key>
+    <string>2222</string>
+    <key>SSH_AUTH_SOCK</key>
+    <string>/Users/sankkr/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock</string>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>ProcessType</key>
+  <string>Background</string>
+
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+
+  <key>Umask</key>
+  <integer>63</integer>
+
+  <key>StandardOutPath</key>
+  <string>/Users/sankkr/Library/Logs/sshterm-server/server.out.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/Users/sankkr/Library/Logs/sshterm-server/server.err.log</string>
+</dict>
+</plist>

@@ -1,0 +1,3 @@
+http://sshterm.test {
+	reverse_proxy 127.0.0.1:2222
+}

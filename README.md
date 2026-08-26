@@ -1,70 +1,42 @@
 # sshterm
 
-Desktop SSH terminal manager built with Electron + React + TypeScript.
+Local browser-based SSH terminal manager built with React, TypeScript, and Node.js. The app runs in a browser. Electron is no longer part of the runtime.
 
-`sshterm` reads your SSH config, organizes hosts into folders/spaces, opens interactive terminal tabs, and lets you manage host metadata directly from the UI.
+`sshterm` reads your existing SSH config, organizes hosts into folders and spaces, and opens interactive PTY-backed SSH sessions in a browser. The Node service binds only to `127.0.0.1`; it does not expose SSH access to the network.
 
 ## Features
 
-- Use your existing SSH config file (default: `~/.ssh/config`).
-- Open multiple SSH sessions in tabs (PTY-backed).
-- Sidebar host browser with:
-	- Favorites
-	- Folders/directories
-	- Space-based views
-	- Unassigned hosts
-- Drag-and-drop host assignment and folder moves.
-- Host editor (add/update/delete host entries).
-- Host reachability checks (`ping`) in the background.
-- Host key change flow: detect warning, offer “Accept and Reconnect”.
-- Configurable terminal scrollback.
+- Use your existing SSH config file. The default is `~/.ssh/config`.
+- Open multiple SSH sessions in browser tabs.
+- Browse favorites, folders, spaces, and unassigned hosts.
+- Drag hosts between folders and spaces.
+- Add, update, and delete SSH host entries.
+- Check host reachability with the system `ping` command.
+- Detect changed host keys and remove the old `known_hosts` entry after confirmation.
+- Configure terminal scrollback.
 
-## Keyboard Shortcuts
+## How it works
 
-- `Cmd/Ctrl + ,` → Open Preferences
-- `Cmd/Ctrl + Shift + ,` → Open active device settings
-- `Cmd/Ctrl + S` → Toggle sidebar
+The React client runs in a normal browser. A local Node service handles the operations that browsers cannot perform:
 
-## How sshterm maps SSH config to UI
+- Spawning OpenSSH inside a PTY
+- Reading and writing the SSH config
+- Running reachability checks
+- Updating `known_hosts`
 
-The app uses special managed comments in your SSH config:
-
-- `# x-sshterm-group: Global/Team/Foo` → Assign host to folder
-- `# x-sshterm-favorites: true` → Mark host as favorite
-- Managed folder/space block:
-	- `# x-sshterm-managed-dirs:start`
-	- `# x-sshterm-space: <SpaceName>` (optional)
-	- `# x-sshterm-dir: Global/Path`
-	- `# x-sshterm-managed-dirs:end`
-
-Example:
-
-```sshconfig
-Host edge-router
-	HostName 10.10.10.1
-	User admin
-
-# x-sshterm-group: Global/Lab/Network
-# x-sshterm-favorites: true
-Host core-switch
-	HostName 10.10.10.2
-	User admin
-
-# x-sshterm-managed-dirs:start
-# x-sshterm-dir: Global/Lab
-# x-sshterm-space: Network
-# x-sshterm-dir: Global/Lab/Network
-# x-sshterm-managed-dirs:end
-```
+Host and settings operations use a local HTTP API. Terminal input and output use a WebSocket. In production, the service listens on `127.0.0.1:2222` and Caddy exposes it at `http://sshterm.test`.
 
 ## Requirements
 
-- Node.js 20+
-- npm 10+
-- OpenSSH available in PATH (the app prefers `/usr/bin/ssh` on macOS)
+- Node.js 20.19 or newer
+- npm 10 or newer
+- OpenSSH available in `PATH`. On macOS, the service prefers `/usr/bin/ssh`.
 - A valid SSH config file
+- Caddy, if you want to use `http://sshterm.test` instead of a port URL
 
-## Local Development
+`node-pty` is a native dependency. If npm cannot use a prebuilt binary on your platform, you will also need the usual C/C++ build tools and Python required by `node-gyp`.
+
+## Development
 
 Install dependencies:
 
@@ -72,11 +44,13 @@ Install dependencies:
 npm install
 ```
 
-Run in dev mode:
+Start the Node service and Vite development server:
 
 ```bash
 npm run dev
 ```
+
+Open `http://127.0.0.1:5173`. Vite serves the React client on port `5173` and proxies API and WebSocket requests to the development service on port `4174`.
 
 Useful checks:
 
@@ -86,39 +60,160 @@ npm run typecheck
 npm run build
 ```
 
-## Build / Package
+## Production run
 
-Create distributables:
-
-```bash
-npm run build:mac
-npm run build:win
-npm run build:linux
-```
-
-Build unpacked output only:
+Build and start the Node service:
 
 ```bash
-npm run build:unpack
+npm run build
+npm start
 ```
 
-## Project Structure
+Open `http://127.0.0.1:4173`.
 
-- `src/main` — Electron main process (IPC, SSH session management, config parsing)
-- `src/preload` — secure renderer bridge APIs
-- `src/renderer` — React UI
-- `src/shared` — shared TypeScript types
+For a runtime-only installation, omit development dependencies after building:
 
-## First GitHub Publish Checklist
+```bash
+npm prune --omit=dev
+```
 
-Before your first public release, confirm these project metadata values are updated:
+Run `npm install` again when you need the development tools.
 
-- `package.json`: `description`, `author`, `homepage`
-- `electron-builder.yml`: `appId`, `publish.url`, maintainer fields/icons
-- `dev-app-update.yml`: updater URL
+## Run at login on macOS
 
-Current defaults include placeholder values (for example `example.com` / `https://example.com/auto-updates`) and should be replaced for production publishing.
+The repository includes [a LaunchAgent definition](deploy/com.sshterm.local-server.plist) for this Mac. It runs the production build on `127.0.0.1:2222`, starts when the user logs in, and restarts after a crash. The runtime files live under `~/Library/Application Support/sshterm-server` because macOS restricts background access to the `Documents` folder.
+
+Build the app before loading the agent:
+
+```bash
+npm install
+npm run build
+npm prune --omit=dev
+mkdir -p ~/Library/LaunchAgents ~/Library/Logs/sshterm-server
+mkdir -p ~/Library/Application\ Support/sshterm-server
+ditto dist ~/Library/Application\ Support/sshterm-server/dist
+ditto node_modules ~/Library/Application\ Support/sshterm-server/node_modules
+cp package.json package-lock.json ~/Library/Application\ Support/sshterm-server/
+cp deploy/com.sshterm.local-server.plist ~/Library/LaunchAgents/
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.sshterm.local-server.plist
+```
+
+Open `http://127.0.0.1:2222` after the agent starts. This is the backend's browser entrypoint when Caddy is not in use.
+
+## Use sshterm.test
+
+Caddy provides the local hostname and forwards requests to the Node service. The checked-in configuration is [deploy/Caddyfile](deploy/Caddyfile). `.test` is intentional. `.local` is reserved for Bonjour and can resolve through mDNS instead of `/etc/hosts`.
+
+Install Caddy with Homebrew:
+
+```bash
+brew install caddy
+```
+
+Map the hostname to loopback:
+
+```bash
+sudo sh -c 'printf "\n127.0.0.1 sshterm.test\n" >> /etc/hosts'
+```
+
+Install and validate the Caddy configuration:
+
+```bash
+cp deploy/Caddyfile /opt/homebrew/etc/Caddyfile
+caddy validate --config /opt/homebrew/etc/Caddyfile
+brew services start caddy
+```
+
+Open `http://sshterm.test`. Caddy listens on port `80` and proxies to `127.0.0.1:2222`. The Node service explicitly allows `sshterm.test` as a browser host and origin for this local proxy.
+
+When the browser build or server code changes, rebuild and copy the complete `dist` directory to the runtime location, then restart the LaunchAgent:
+
+```bash
+npm run build
+ditto dist ~/Library/Application\ Support/sshterm-server/dist
+launchctl kickstart -k gui/$(id -u)/com.sshterm.local-server
+```
+
+Caddy does not need a restart when only the application build changes.
+
+Inspect or restart the service:
+
+```bash
+launchctl print gui/$(id -u)/com.sshterm.local-server
+launchctl kickstart -k gui/$(id -u)/com.sshterm.local-server
+```
+
+Stop and remove it:
+
+```bash
+launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.sshterm.local-server.plist
+rm ~/Library/LaunchAgents/com.sshterm.local-server.plist
+```
+
+The checked-in plist uses `/opt/homebrew/bin/node` and this Mac's 1Password SSH agent socket. Update those paths if Node or the SSH agent changes. A LaunchAgent runs after login, not at the macOS login screen. It pauses while the laptop sleeps and continues after wake.
+
+## Settings
+
+The service stores settings in:
+
+```text
+~/.config/sshterm/settings.json
+```
+
+Set `XDG_CONFIG_HOME` to change the base config directory. These environment variables provide more direct overrides:
+
+- `SSHTERM_CONFIG` sets the initial SSH config path.
+- `SSHTERM_SETTINGS_PATH` sets the settings file path.
+- `PORT` changes the production HTTP port. The service still binds to `127.0.0.1`.
+
+## Keyboard shortcuts
+
+- `Cmd/Ctrl + ,` opens preferences.
+- `Cmd/Ctrl + Shift + ,` opens settings for the active device.
+- `Cmd/Ctrl + S` toggles the sidebar.
+- `Cmd/Ctrl + T` opens host search.
+- `Cmd/Ctrl + F` searches the current terminal.
+- `Cmd/Ctrl + Shift + F` searches all terminal tabs.
+
+Browsers reserve some shortcuts, including tab switching and window closing. Those combinations may not reach the app. The matching controls remain available in the UI.
+
+## SSH config metadata
+
+The app uses managed comments in your SSH config:
+
+- `# x-sshterm-group: Global/Team/Foo` assigns a host to a folder.
+- `# x-sshterm-favorites: true` marks a host as a favorite.
+- A managed folder and space block records empty folders and space roots.
+
+```sshconfig
+Host edge-router
+  HostName 10.10.10.1
+  User admin
+
+# x-sshterm-group: Global/Lab/Network
+# x-sshterm-favorites: true
+Host core-switch
+  HostName 10.10.10.2
+  User admin
+
+# x-sshterm-managed-dirs:start
+# x-sshterm-dir: Global/Lab
+# x-sshterm-space: Network
+# x-sshterm-dir: Global/Lab/Network
+# x-sshterm-managed-dirs:end
+```
+
+## Project structure
+
+- `src/renderer` contains the React browser UI and browser API adapter.
+- `src/server` contains the local HTTP and WebSocket service.
+- `src/main` contains the operating-system SSH, PTY, config, and reachability services.
+- `src/shared` contains shared API and model types.
+
+## Security boundary
+
+This is a single-user local app. The Node service binds to `127.0.0.1` and rejects unknown browser hosts and origins. `sshterm.test` is allowed only for the local Caddy proxy. Do not remove these checks or expose the service through a public interface. A remotely hosted version would need authentication, TLS, per-user SSH configuration, credential isolation, and access controls for target hosts.
 
 ## License
 
-Add your preferred license file (`LICENSE`) before publishing publicly.
+See [LICENSE.md](LICENSE.md).

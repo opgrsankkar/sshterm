@@ -707,7 +707,7 @@ export async function updateHostSettingsInConfig(
 
   let currentHostIndex = hostIndex
   currentHostIndex = setManagedComment(lines, currentHostIndex, GROUP_COMMENT_REGEX, groupComment)
-  currentHostIndex = setManagedComment(
+  setManagedComment(
     lines,
     currentHostIndex,
     FAVORITE_COMMENT_REGEX,

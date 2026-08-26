@@ -4,6 +4,7 @@ out
 .DS_Store
 .eslintcache
 *.log*
+var/
 
 # Keep build artifacts ignored, but ensure required mac entitlements plist is tracked
 !build/

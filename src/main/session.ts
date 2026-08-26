@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { execFile, execFileSync } from 'node:child_process'
 import { promisify } from 'node:util'
-import pty, { type IPty } from 'node-pty'
+import { spawn as spawnPty, type IPty } from 'node-pty'
 import type { CreateSessionRequest } from '../shared/types'
 
 interface SessionRecord {
@@ -115,7 +115,7 @@ export class SessionManager {
 
     let instance: IPty
     try {
-      instance = pty.spawn(shell, args, {
+      instance = spawnPty(shell, args, {
         name: 'xterm-256color',
         cols: request.cols,
         rows: request.rows,
@@ -199,6 +199,13 @@ export class SessionManager {
     if (!session) return
     session.pty.kill()
     this.sessions.delete(sessionId)
+  }
+
+  closeAll(): void {
+    for (const session of this.sessions.values()) {
+      session.pty.kill()
+    }
+    this.sessions.clear()
   }
 
   acceptHostKeyChange(alias: string, configPath: string): void {

@@ -1,13 +1,41 @@
-import { ElectronAPI } from '@electron-toolkit/preload'
 import type {
   AppSettings,
   CreateSessionRequest,
   HostOptions,
   SessionCreated,
   SshConfigModel
-} from '../shared/types'
+} from './types'
 
-interface SshtermApi {
+export interface HostEditorPayload {
+  name: string
+  aliases: string[]
+  groupPath: string
+  isFavorite: boolean
+  options: HostOptions
+}
+
+export interface HostUpdatePayload extends HostEditorPayload {
+  currentAlias: string
+}
+
+export interface SessionHostKeyChangedPayload {
+  sessionId: string
+  alias: string
+  fingerprint: string | null
+  knownHostsPath: string | null
+  offendingLine: number | null
+  message: string
+}
+
+export interface SessionAuthenticationFallbackPayload {
+  sessionId: string
+  alias: string
+  message: string
+  suggestedPreferredAuthentications: string
+  debugSummary: string | null
+}
+
+export interface SshtermApi {
   getSettings: () => Promise<AppSettings>
   setConfigPath: (configPath: string) => Promise<SshConfigModel>
   updateSettings: (input: { configFilePath?: string; scrollbackLines?: number }) => Promise<{
@@ -23,21 +51,8 @@ interface SshtermApi {
   convertGroupToSpace: (groupPath: string, spaceName: string) => Promise<SshConfigModel>
   convertSpaceToGroup: (groupPath: string) => Promise<SshConfigModel>
   deleteHost: (alias: string) => Promise<SshConfigModel>
-  addHost: (payload: {
-    name: string
-    aliases: string[]
-    groupPath: string
-    isFavorite: boolean
-    options: HostOptions
-  }) => Promise<SshConfigModel>
-  updateHostSettings: (payload: {
-    currentAlias: string
-    name: string
-    aliases: string[]
-    groupPath: string
-    isFavorite: boolean
-    options: HostOptions
-  }) => Promise<SshConfigModel>
+  addHost: (payload: HostEditorPayload) => Promise<SshConfigModel>
+  updateHostSettings: (payload: HostUpdatePayload) => Promise<SshConfigModel>
   checkReachability: (
     hosts: Array<{ alias: string; target: string }>
   ) => Promise<Array<{ alias: string; reachable: boolean }>>
@@ -49,24 +64,9 @@ interface SshtermApi {
   closeSession: (sessionId: string) => Promise<void>
   onSessionData: (listener: (payload: { sessionId: string; data: string }) => void) => () => void
   onSessionExit: (listener: (payload: { sessionId: string; code: number }) => void) => () => void
-  onSessionHostKeyChanged: (
-    listener: (payload: {
-      sessionId: string
-      alias: string
-      fingerprint: string | null
-      knownHostsPath: string | null
-      offendingLine: number | null
-      message: string
-    }) => void
-  ) => () => void
+  onSessionHostKeyChanged: (listener: (payload: SessionHostKeyChangedPayload) => void) => () => void
   onSessionAuthenticationFallback: (
-    listener: (payload: {
-      sessionId: string
-      alias: string
-      message: string
-      suggestedPreferredAuthentications: string
-      debugSummary: string | null
-    }) => void
+    listener: (payload: SessionAuthenticationFallbackPayload) => void
   ) => () => void
   onOpenSettings: (listener: () => void) => () => void
   onOpenActiveDeviceSettings: (listener: () => void) => () => void
@@ -80,11 +80,4 @@ interface SshtermApi {
   onOpenHostSearch: (listener: () => void) => () => void
   onOpenTerminalSearch: (listener: (payload: { scope: 'current' | 'all' }) => void) => () => void
   onCloseActiveTab: (listener: () => void) => () => void
-}
-
-declare global {
-  interface Window {
-    electron: ElectronAPI
-    api: SshtermApi
-  }
 }
