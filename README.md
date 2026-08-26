@@ -24,7 +24,7 @@ The React client runs in a normal browser. A local Node service handles the oper
 - Running reachability checks
 - Updating `known_hosts`
 
-Host and settings operations use a local HTTP API. Terminal input and output use a WebSocket. In production, the service listens on `127.0.0.1:2222` and Caddy exposes it at `http://sshterm.test`.
+Host and settings operations use a local HTTP API. Terminal input and output use a WebSocket. In production, the service listens on `127.0.0.1:2222` and Caddy exposes it at `https://sshterm.test`.
 
 ## Requirements
 
@@ -32,7 +32,7 @@ Host and settings operations use a local HTTP API. Terminal input and output use
 - npm 10 or newer
 - OpenSSH available in `PATH`. On macOS, the service prefers `/usr/bin/ssh`.
 - A valid SSH config file
-- Caddy, if you want to use `http://sshterm.test` instead of a port URL
+- Caddy, if you want to use `https://sshterm.test` instead of a port URL
 
 `node-pty` is a native dependency. If npm cannot use a prebuilt binary on your platform, you will also need the usual C/C++ build tools and Python required by `node-gyp`.
 
@@ -102,7 +102,7 @@ Open `http://127.0.0.1:2222` after the agent starts. This is the backend's brows
 
 ## Use sshterm.test
 
-Caddy provides the local hostname and forwards requests to the Node service. The checked-in configuration is [deploy/Caddyfile](deploy/Caddyfile). `.test` is intentional. `.local` is reserved for Bonjour and can resolve through mDNS instead of `/etc/hosts`.
+Caddy provides the local hostname, HTTPS, and forwarding to the Node service. The checked-in configuration is [deploy/Caddyfile](deploy/Caddyfile). `.test` is intentional. `.local` is reserved for Bonjour and can resolve through mDNS instead of `/etc/hosts`.
 
 Install Caddy with Homebrew:
 
@@ -124,7 +124,13 @@ caddy validate --config /opt/homebrew/etc/Caddyfile
 brew services start caddy
 ```
 
-Open `http://sshterm.test`. Caddy listens on port `80` and proxies to `127.0.0.1:2222`. The Node service explicitly allows `sshterm.test` as a browser host and origin for this local proxy.
+Trust Caddy's local root CA on macOS before opening the site:
+
+```bash
+caddy trust
+```
+
+Open `https://sshterm.test`. Caddy listens on port `443` and proxies to `127.0.0.1:2222`. The Node service explicitly allows `sshterm.test` as a browser host and origin for this local proxy. HTTPS also enables secure WebSockets for terminal sessions.
 
 When the browser build or server code changes, rebuild and copy the complete `dist` directory to the runtime location, then restart the LaunchAgent:
 
